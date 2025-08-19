@@ -1,0 +1,451 @@
+// Orrange P2P - Production Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique @map("wallet_address")
+  email         String?  @unique
+  username      String?  @unique
+  
+  // Trust & Reputation
+  reputationScore Float   @default(0.0) @map("reputation_score")
+  tradeCount      Int     @default(0) @map("trade_count")
+  disputeRatio    Float   @default(0.0) @map("dispute_ratio")
+  
+  // KYC & Security
+  kycStatus       KycStatus @default(UNVERIFIED) @map("kyc_status")
+  riskLevel       RiskLevel @default(LOW) @map("risk_level")
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  // Enhanced Security Fields
+  riskScore       Int       @default(0) @map("risk_score") // 0-100 scale
+  securityFlags   String[]  @default([]) @map("security_flags")
+  lastRiskUpdate  DateTime? @map("last_risk_update")
+  totalVolume     String    @default("0") @map("total_volume")
+  maxDailyLimit   String    @default("100000") @map("max_daily_limit")
+  isBlacklisted   Boolean   @default(false) @map("is_blacklisted")
+  blacklistReason String?   @map("blacklist_reason")
+  
+  // Two-Factor Authentication
+  twoFactorEnabled    Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret     String?   @map("two_factor_secret")
+  backupCodes         String[]  @default([]) @map("backup_codes")
+  lastLoginAt         DateTime? @map("last_login_at")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  
+  // Metadata
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  lastActivity DateTime @default(now()) @map("last_activity")
+  
+  // Relations
+  createdOrders Order[] @relation("OrderCreator")
+  buyTrades    Trade[] @relation("TradeBuyer")
+  sellTrades   Trade[] @relation("TradeSeller")
+  disputes     Dispute[]
+  auditLogs    AuditLog[]
+  
+  @@map("users")
+}
+
+// Enhanced Escrow model with security features
+model Escrow {
+  id                    String       @id @default(cuid())
+  tradeId               String       @unique
+  trade                 Trade        @relation(fields: [tradeId], references: [id])
+  status                EscrowStatus
+  chainId               Int
+  tokenAddress          String
+  amount                String
+  transactionHash       String?
+  blockNumber           Int?
+  
+  // Security & Risk Management
+  riskScore             Int          @default(0)
+  securityFlags         String[]     @default([])
+  requiresManualReview  Boolean      @default(false) @map("requires_manual_review")
+  reviewedBy            String?      @map("reviewed_by")
+  reviewedAt            DateTime?    @map("reviewed_at")
+  
+  // Timing & Lifecycle
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  timeoutAt             DateTime     @map("timeout_at")
+  
+  // Release & Refund Details
+  releasedAt            DateTime?    @map("released_at")
+  refundedAt            DateTime?    @map("refunded_at")
+  disputedAt            DateTime?    @map("disputed_at")
+  
+  // Transaction Hashes
+  releaseTransactionHash String?     @map("release_transaction_hash")
+  refundTransactionHash  String?     @map("refund_transaction_hash")
+  disputeTransactionHash String?     @map("dispute_transaction_hash")
+  
+  // Payment Confirmation
+  paymentProof          Json?        @map("payment_proof")
+  paymentConfirmedAt    DateTime?    @map("payment_confirmed_at")
+  paymentConfirmedBy    String?      @map("payment_confirmed_by")
+  
+  // Emergency Controls
+  emergencyHalt         Boolean      @default(false) @map("emergency_halt")
+  emergencyReason       String?      @map("emergency_reason")
+  emergencyHaltedBy     String?      @map("emergency_halted_by")
+  emergencyHaltedAt     DateTime?    @map("emergency_halted_at")
+  
+  @@map("escrows")
+}
+
+// Enhanced Dispute model
+model Dispute {
+  id             String        @id @default(cuid())
+  tradeId        String        @unique
+  trade          Trade         @relation(fields: [tradeId], references: [id])
+  
+  // Dispute Details
+  reason         String
+  evidence       Json?         // Array of evidence URLs/hashes
+  evidenceHash   String?       @map("evidence_hash") // Blockchain evidence hash
+  status         DisputeStatus
+  priority       DisputePriority @default(NORMAL)
+  category       DisputeCategory @default(OTHER)
+  
+  // Parties & Resolution
+  disputedBy     String        @map("disputed_by") // 'seller' | 'buyer'
+  assignedTo     String?       @map("assigned_to") // Moderator ID
+  resolution     String?
+  resolutionType String?       @map("resolution_type") // 'BUYER_FAVOR' | 'SELLER_FAVOR' | 'SPLIT'
+  
+  // Financial Resolution
+  buyerAmount    String?       @map("buyer_amount")
+  sellerAmount   String?       @map("seller_amount")
+  platformAmount String?       @map("platform_amount")
+  
+  // Timeline
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  resolvedAt     DateTime?     @map("resolved_at")
+  escalatedAt    DateTime?     @map("escalated_at")
+  
+  // Resolution Authority
+  resolvedBy     String?       @map("resolved_by")
+  autoResolved   Boolean       @default(false) @map("auto_resolved")
+  
+  @@map("disputes")
+}
+
+// Audit Log for compliance and security
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?     @map("user_id")
+  user        User?       @relation(fields: [userId], references: [id])
+  
+  // Event Details
+  action      String      // 'CREATE_ESCROW', 'RELEASE_ESCROW', etc.
+  resource    String      // 'ESCROW', 'TRADE', 'USER', etc.
+  resourceId  String      @map("resource_id")
+  
+  // Request Context
+  ipAddress   String      @map("ip_address")
+  userAgent   String?     @map("user_agent")
+  sessionId   String?     @map("session_id")
+  
+  // Change Details
+  oldValues   Json?       @map("old_values")
+  newValues   Json?       @map("new_values")
+  
+  // Security Context
+  riskScore   Int?        @map("risk_score")
+  flags       String[]    @default([])
+  severity    AuditSeverity @default(INFO)
+  
+  // Metadata
+  createdAt   DateTime    @default(now()) @map("created_at")
+  metadata    Json?       // Additional context
+  
+  @@map("audit_logs")
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([severity, createdAt])
+}
+
+// Security Incident tracking
+model SecurityIncident {
+  id              String            @id @default(cuid())
+  type            IncidentType
+  severity        IncidentSeverity
+  status          IncidentStatus    @default(OPEN)
+  
+  // Incident Details
+  title           String
+  description     String
+  affectedUsers   String[]          @map("affected_users")
+  affectedTrades  String[]          @map("affected_trades")
+  
+  // Investigation
+  investigatedBy  String?           @map("investigated_by")
+  findings        String?
+  actions         String[]          @default([])
+  
+  // Timeline
+  detectedAt      DateTime          @map("detected_at")
+  reportedAt      DateTime          @default(now()) @map("reported_at")
+  resolvedAt      DateTime?         @map("resolved_at")
+  
+  // Impact Assessment
+  financialImpact String?           @map("financial_impact")
+  userImpact      Int?              @map("user_impact")
+  
+  @@map("security_incidents")
+}
+
+// Enums for Escrow Status
+enum EscrowStatus {
+  INITIATED
+  FUNDED
+  PAYMENT_CONFIRMED
+  RELEASED
+  DISPUTED
+  REFUNDED
+  TIMED_OUT
+  EMERGENCY_HALT
+}
+
+// Enhanced Dispute Status
+enum DisputeStatus {
+  OPEN
+  ASSIGNED
+  UNDER_REVIEW
+  PENDING_EVIDENCE
+  ESCALATED
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  RESOLVED_SPLIT
+  DISMISSED
+  APPEALED
+}
+
+enum DisputePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+  EMERGENCY
+}
+
+enum DisputeCategory {
+  PAYMENT_NOT_RECEIVED
+  PAYMENT_NOT_SENT
+  WRONG_AMOUNT
+  FRAUD_SUSPECTED
+  TECHNICAL_ISSUE
+  POLICY_VIOLATION
+  OTHER
+}
+
+// Audit and Security Enums
+enum AuditSeverity {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  CRITICAL
+}
+
+enum IncidentType {
+  FRAUD_ATTEMPT
+  UNAUTHORIZED_ACCESS
+  DATA_BREACH
+  SYSTEM_COMPROMISE
+  SUSPICIOUS_ACTIVITY
+  COMPLIANCE_VIOLATION
+  TECHNICAL_FAILURE
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  CONTAINED
+  RESOLVED
+  CLOSED
+}
+  id        String   @id @default(cuid())
+  version   Int      @default(1)
+  
+  // Order Details
+  orderType OrderType @map("order_type")
+  side      OrderSide
+  asset     String    // BTC, ETH, USDT, etc.
+  fiatCurrency String @map("fiat_currency") // USD, EUR, etc.
+  
+  // Amounts (using string for precision)
+  amount          String  // Crypto amount
+  price           String  // Fiat price per unit
+  totalValue      String  @map("total_value") // amount * price
+  minTradeAmount  String? @map("min_trade_amount")
+  
+  // Status & Lifecycle
+  status      OrderStatus @default(PENDING)
+  filledAmount String     @default("0") @map("filled_amount")
+  
+  // Payment & Settlement
+  paymentMethods  String[] @map("payment_methods") // ["BANK_TRANSFER", "PAYPAL"]
+  escrowAddress   String?  @map("escrow_address")
+  
+  // Security
+  orderHash  String  @unique @map("order_hash")
+  signature  String
+  nonce      BigInt
+  deadline   DateTime
+  
+  // Relations
+  creatorId String @map("creator_id")
+  creator   User   @relation("OrderCreator", fields: [creatorId], references: [id])
+  
+  // Matched Trades
+  buyTrades  Trade[] @relation("TradeBuyOrder")
+  sellTrades Trade[] @relation("TradeSellOrder")
+  
+  // Metadata
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  expiresAt DateTime? @map("expires_at")
+  
+  @@index([asset, fiatCurrency, side, status])
+  @@index([creatorId, status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model Trade {
+  id String @id @default(cuid())
+  
+  // Trade Participants
+  buyOrderId  String @map("buy_order_id")
+  sellOrderId String @map("sell_order_id")
+  buyerId     String @map("buyer_id")
+  sellerId    String @map("seller_id")
+  
+  // Trade Details
+  asset        String
+  fiatCurrency String @map("fiat_currency")
+  amount       String  // Crypto amount
+  price        String  // Execution price
+  totalValue   String  @map("total_value")
+  
+  // Fees
+  platformFee  String @default("0") @map("platform_fee")
+  networkFee   String @default("0") @map("network_fee")
+  
+  // Status & Settlement
+  status         TradeStatus @default(MATCHED)
+  escrowAddress  String?     @map("escrow_address")
+  releaseHash    String?     @map("release_hash")
+  disputeWindow  DateTime?   @map("dispute_window")
+  
+  // Relations
+  buyOrder  Order @relation("TradeBuyOrder", fields: [buyOrderId], references: [id])
+  sellOrder Order @relation("TradeSellOrder", fields: [sellOrderId], references: [id])
+  buyer     User  @relation("TradeBuyer", fields: [buyerId], references: [id])
+  seller    User  @relation("TradeSeller", fields: [sellerId], references: [id])
+  
+  disputes  Dispute[]
+  
+  // Timestamps
+  matchedAt   DateTime  @default(now()) @map("matched_at")
+  fundedAt    DateTime? @map("funded_at")
+  completedAt DateTime? @map("completed_at")
+  
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([matchedAt])
+  @@map("trades")
+}
+
+model Dispute {
+  id      String @id @default(cuid())
+  tradeId String @map("trade_id")
+  
+  // Dispute Details
+  initiatorId String      @map("initiator_id")
+  reason      String
+  evidence    String[]    // URLs to evidence files
+  status      DisputeStatus @default(OPEN)
+  resolution  String?
+  
+  // Relations
+  trade      Trade @relation(fields: [tradeId], references: [id])
+  initiator  User  @relation(fields: [initiatorId], references: [id])
+  
+  // Timestamps
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+  
+  @@map("disputes")
+}
+
+// Enums
+enum KycStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKED
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  PENDING
+  ACTIVE
+  PARTIAL
+  FILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum TradeStatus {
+  MATCHED
+  FUNDED
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum DisputeStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  ESCALATED
+}

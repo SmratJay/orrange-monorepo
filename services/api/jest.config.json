@@ -1,0 +1,29 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "testMatch": [
+    "**/tests/**/*.test.ts"
+  ],
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/dev-server.ts",
+    "!src/test-server.ts"
+  ],
+  "coverageDirectory": "coverage",
+  "coverageReporters": [
+    "text",
+    "lcov",
+    "html"
+  ],
+  "setupFilesAfterEnv": [
+    "<rootDir>/tests/setup.ts"
+  ],
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "forceExit": true,
+  "detectOpenHandles": true,
+  "moduleNameMapping": {
+    "^@/(.*)$": "<rootDir>/src/$1"
+  }
+}

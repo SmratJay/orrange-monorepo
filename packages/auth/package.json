@@ -1,0 +1,35 @@
+{
+  "name": "@orrange/auth",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orrange/shared": "workspace:*",
+    "jose": "^5.0.0",
+    "bcryptjs": "^2.4.3",
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.3",
+    "ethers": "^6.9.0",
+    "siwe": "^2.1.4",
+    "jsonwebtoken": "^9.0.2",
+    "crypto-js": "^4.2.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "@types/react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/qrcode": "^1.5.5",
+    "typescript": "^5.0.0",
+    "rimraf": "^5.0.0"
+  }
+}
