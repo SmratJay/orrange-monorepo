@@ -9,7 +9,7 @@ export async function errorHandler(
   const isDevelopment = process.env.NODE_ENV === 'development';
 
   // Log error
-  request.log.error({
+  console.error('Request error:', {
     error: error.message,
     stack: error.stack,
     url: request.url,

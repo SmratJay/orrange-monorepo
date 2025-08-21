@@ -1,9 +1,8 @@
 // P2P Trading API Routes
-import express, { Request, Response, NextFunction } from 'express';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { P2PService } from '../services/p2p-service';
-import { authenticateToken } from '../middleware/auth';
-import { validateRequest } from '../middleware/validation';
+import { requireAuth } from '../middleware/security';
 import { z } from 'zod';
 
 const router = express.Router();

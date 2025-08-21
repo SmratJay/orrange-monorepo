@@ -2,9 +2,11 @@
 import 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { Redis } from 'ioredis';
+import { JWT } from '@fastify/jwt';
 
 declare module 'fastify' {
   interface FastifyInstance {
+    jwt: JWT;
     redis: Redis;
     prisma: PrismaClient;
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;

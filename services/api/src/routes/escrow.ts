@@ -135,7 +135,10 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       }
 
       // Create escrow
-      const result = await escrowService.createEscrow(body);
+      const result = await escrowService.createEscrow({
+        ...body,
+        timeoutHours: body.timeoutHours ?? 24, // Default to 24 hours if not specified
+      });
 
       if (!result.success) {
         await createAuditLog(fastify.prisma, {
@@ -177,7 +180,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Escrow creation error:', error);
+      console.error('Escrow creation error:', error);
       
       await createAuditLog(fastify.prisma, {
         userId: user.id,
@@ -230,7 +233,10 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      const result = await escrowService.releaseEscrow(body.tradeId, body.paymentProof);
+      const result = await escrowService.releaseEscrow(body.tradeId, {
+        ...body.paymentProof,
+        evidenceHashes: body.paymentProof.evidenceHashes ?? [], // Default to empty array if not provided
+      });
 
       if (!result.success) {
         return reply.code(400).send({
@@ -255,7 +261,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Escrow release error:', error);
+      console.error('Escrow release error:', error);
       return reply.code(500).send({
         success: false,
         error: 'Internal server error',
@@ -303,7 +309,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Escrow refund error:', error);
+      console.error('Escrow refund error:', error);
       return reply.code(500).send({
         success: false,
         error: 'Internal server error',
@@ -380,7 +386,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Dispute creation error:', error);
+      console.error('Dispute creation error:', error);
       return reply.code(500).send({
         success: false,
         error: 'Internal server error',
@@ -454,7 +460,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Get escrow error:', error);
+      console.error('Get escrow error:', error);
       return reply.code(500).send({
         success: false,
         error: 'Internal server error',
@@ -501,7 +507,7 @@ export default async function escrowRoutes(fastify: FastifyInstance) {
       });
 
     } catch (error) {
-      fastify.log.error('Emergency halt error:', error);
+      console.error('Emergency halt error:', error);
       return reply.code(500).send({
         success: false,
         error: 'Internal server error',

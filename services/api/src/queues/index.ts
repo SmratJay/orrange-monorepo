@@ -1,5 +1,5 @@
 // Job Queues for Orrange P2P API
-import Queue from 'bull';
+import Queue = require('bull');
 import Redis from 'ioredis';
 
 // Create Redis connection for queues

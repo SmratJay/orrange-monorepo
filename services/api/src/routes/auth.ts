@@ -3,6 +3,14 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { nanoid } from 'nanoid';
 
+// Extend Fastify types inline
+declare module 'fastify' {
+  interface FastifyInstance {
+    jwt: any;
+    redis: any;
+  }
+}
+
 const prisma = new PrismaClient();
 
 // Request interfaces
@@ -26,8 +34,6 @@ async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/wallet/connect - Wallet authentication
   fastify.post<WalletConnectRequest>('/connect', {
     schema: {
-      tags: ['Authentication'],
-      description: 'Authenticate user with wallet signature',
       body: {
         type: 'object',
         required: ['signature', 'message', 'address', 'nonce'],
@@ -108,7 +114,7 @@ async function authRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Wallet connect error:', error);
+      console.error('Wallet connect error:', error);
       return reply.code(500).send({
         error: 'Authentication failed',
       });
@@ -118,8 +124,6 @@ async function authRoutes(fastify: FastifyInstance) {
   // POST /auth/refresh - Refresh access token
   fastify.post<RefreshTokenRequest>('/refresh', {
     schema: {
-      tags: ['Authentication'],
-      description: 'Refresh access token using refresh token',
       body: {
         type: 'object',
         required: ['refreshToken'],
@@ -153,6 +157,12 @@ async function authRoutes(fastify: FastifyInstance) {
       // Get user data
       const user = await prisma.user.findUnique({
         where: { id: userId },
+        select: {
+          id: true,
+          walletAddress: true,
+          role: true,
+          isActive: true,
+        },
       });
 
       if (!user || !user.isActive) {
@@ -190,7 +200,7 @@ async function authRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Token refresh error:', error);
+      console.error('Token refresh error:', error);
       return reply.code(500).send({
         error: 'Token refresh failed',
       });
@@ -198,12 +208,7 @@ async function authRoutes(fastify: FastifyInstance) {
   });
 
   // GET /auth/profile - Get current user profile
-  fastify.get('/profile', {
-    schema: {
-      tags: ['Authentication'],
-      description: 'Get current user profile',
-    }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/profile', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       // TODO: Implement proper authentication middleware
       const mockUser = {
@@ -222,12 +227,10 @@ async function authRoutes(fastify: FastifyInstance) {
           reputationScore: true,
           tradeCount: true,
           isVerified: true,
-          kycLevel: true,
+          kycStatus: true,
           role: true,
           createdAt: true,
           updatedAt: true,
-          preferences: true,
-          lastActiveAt: true,
         },
       });
 
@@ -243,7 +246,7 @@ async function authRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Get profile error:', error);
+      console.error('Get profile error:', error);
       return reply.code(500).send({
         error: 'Failed to get profile',
       });
@@ -253,8 +256,6 @@ async function authRoutes(fastify: FastifyInstance) {
   // GET /auth/nonce/:address - Get nonce for wallet signature
   fastify.get<{ Params: { address: string } }>('/nonce/:address', {
     schema: {
-      tags: ['Authentication'],
-      description: 'Get nonce for wallet signature verification',
       params: {
         type: 'object',
         required: ['address'],
@@ -288,7 +289,7 @@ async function authRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Get nonce error:', error);
+      console.error('Get nonce error:', error);
       return reply.code(500).send({
         error: 'Failed to generate nonce',
       });

@@ -37,6 +37,10 @@ model User {
   negativeRating      Int          @default(0) @map("negative_rating")
   avgResponseTime     Int?         @map("avg_response_time") // in minutes
   
+  // Authentication & Authorization
+  role            UserRole  @default(USER)
+  isVerified      Boolean   @default(false) @map("is_verified")
+  
   // KYC & Security
   kycStatus       KycStatus @default(UNVERIFIED) @map("kyc_status")
   riskLevel       RiskLevel @default(LOW) @map("risk_level")
@@ -397,6 +401,13 @@ enum P2PDisputeStatus {
   RESOLVED
   CLOSED
   APPEALED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+  ARBITRATOR
 }
 
 enum KycStatus {

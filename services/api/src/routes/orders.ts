@@ -96,12 +96,11 @@ async function orderRoutes(fastify: FastifyInstance) {
       const orderHash = nanoid(32);
 
       // Create order
-      const order = await prisma.order.create({
+      const order = await prisma.p2PAd.create({
         data: {
           id: nanoid(),
-          orderType: orderData.orderType,
-          side: orderData.side,
-          asset: orderData.asset.toUpperCase(),
+          type: orderData.side === 'BUY' ? 'BUY' : 'SELL',
+          cryptoAsset: orderData.asset.toUpperCase(),
           fiatCurrency: orderData.fiatCurrency.toUpperCase(),
           amount: amount.toString(),
           price: price.toString(),
@@ -112,7 +111,7 @@ async function orderRoutes(fastify: FastifyInstance) {
           signature: '', // TODO: Implement signature verification
           nonce: BigInt(nonce),
           deadline: orderData.expiresAt ? new Date(orderData.expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h default
-          status: 'PENDING',
+          status: 'ACTIVE',
           creatorId: user.id,
           expiresAt: orderData.expiresAt ? new Date(orderData.expiresAt) : undefined,
         },
@@ -139,7 +138,7 @@ async function orderRoutes(fastify: FastifyInstance) {
           })
         );
       } catch (redisError) {
-        fastify.log.warn('Failed to publish order to Redis:', redisError);
+        console.warn('Failed to publish order to Redis:', redisError);
       }
 
       return {
@@ -148,7 +147,7 @@ async function orderRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Create order error:', error);
+      console.error('Create order error:', error);
       return reply.code(500).send({
         error: 'Failed to create order',
       });
@@ -233,7 +232,7 @@ async function orderRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Get orders error:', error);
+      console.error('Get orders error:', error);
       return reply.code(500).send({
         error: 'Failed to get orders',
       });
@@ -332,7 +331,7 @@ async function orderRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Get order book error:', error);
+      console.error('Get order book error:', error);
       return reply.code(500).send({
         error: 'Failed to get order book',
       });
@@ -452,7 +451,7 @@ async function orderRoutes(fastify: FastifyInstance) {
           })
         );
       } catch (redisError) {
-        fastify.log.warn('Failed to publish order update to Redis:', redisError);
+        console.warn('Failed to publish order update to Redis:', redisError);
       }
 
       return {
@@ -461,7 +460,7 @@ async function orderRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Update order error:', error);
+      console.error('Update order error:', error);
       return reply.code(500).send({
         error: 'Failed to update order',
       });
@@ -521,7 +520,7 @@ async function orderRoutes(fastify: FastifyInstance) {
       };
 
     } catch (error) {
-      fastify.log.error('Get user orders error:', error);
+      console.error('Get user orders error:', error);
       return reply.code(500).send({
         error: 'Failed to get user orders',
       });

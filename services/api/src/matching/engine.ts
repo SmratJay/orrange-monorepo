@@ -112,9 +112,9 @@ export class MatchingEngine extends EventEmitter {
     
     try {
       // Get all active orders from database
-      const activeOrders = await this.prisma.order.findMany({
+      const activeOrders = await this.prisma.p2PAd.findMany({
         where: {
-          status: { in: ['ACTIVE', 'PARTIAL'] },
+          status: { in: ['ACTIVE'] },
         },
         orderBy: {
           createdAt: 'asc',
@@ -443,9 +443,9 @@ export class MatchingEngine extends EventEmitter {
     }
 
     // Get last trade price
-    const lastTrade = await this.prisma.trade.findFirst({
+    const lastTrade = await this.prisma.p2PTrade.findFirst({
       where: {
-        asset: pair.split('-')[0],
+        cryptoAsset: pair.split('-')[0],
         fiatCurrency: pair.split('-')[1],
         status: 'COMPLETED',
       },
@@ -456,14 +456,14 @@ export class MatchingEngine extends EventEmitter {
       pair,
       bids,
       asks,
-      lastPrice: lastTrade?.price,
+      lastPrice: lastTrade?.exchangeRate?.toString(),
       timestamp: Date.now(),
     };
   }
 
   private async updateOrderInDB(orderId: string, updates: any) {
     try {
-      await this.prisma.order.update({
+      await this.prisma.p2PAd.update({
         where: { id: orderId },
         data: {
           ...updates,
@@ -477,21 +477,20 @@ export class MatchingEngine extends EventEmitter {
 
   private async createTradeInDB(match: MatchResult) {
     try {
-      await this.prisma.trade.create({
+      await this.prisma.p2PTrade.create({
         data: {
           id: match.tradeId,
-          buyOrderId: match.buyOrder.id,
-          sellOrderId: match.sellOrder.id,
+          adId: match.buyOrder.id, // Using ad reference instead of buyOrderId
           buyerId: match.buyOrder.userId,
           sellerId: match.sellOrder.userId,
-          asset: match.buyOrder.asset,
+          cryptoAsset: match.buyOrder.asset,
           fiatCurrency: match.buyOrder.fiatCurrency,
-          amount: match.matchedAmount,
-          price: match.matchedPrice,
-          totalValue: match.matchedValue,
-          status: 'INITIATED',
+          cryptoAmount: match.matchedAmount,
+          fiatAmount: match.matchedValue,
+          exchangeRate: match.matchedPrice,
+          status: 'PENDING',
           paymentMethod: match.sellOrder.paymentMethods[0], // TODO: Better payment method selection
-          tradeHash: this.generateTradeHash(match),
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
           createdAt: new Date(match.timestamp),
         },
       });
@@ -537,6 +536,137 @@ export class MatchingEngine extends EventEmitter {
   async processUpdateOrder(order: Order) {
     // Implementation for order updates
     // Update Redis and re-run matching if needed
+  }
+
+  // Advanced trading methods - unified smart engine
+  async placeOrder(orderData: any) {
+    const order: Order = {
+      id: orderData.id,
+      userId: orderData.userId,
+      side: orderData.side,
+      asset: orderData.pair.split('-')[0],
+      fiatCurrency: orderData.pair.split('-')[1],
+      amount: orderData.amount,
+      price: orderData.price,
+      totalValue: (parseFloat(orderData.amount) * parseFloat(orderData.price)).toString(),
+      minTradeAmount: '0',
+      paymentMethods: ['bank_transfer'],
+      timestamp: orderData.timestamp,
+      orderHash: `hash_${orderData.id}`,
+      nonce: BigInt(Date.now())
+    };
+
+    // Process the order through the matching engine
+    const matches = await this.processNewOrder(order);
+    
+    // Return order details with status
+    return {
+      id: order.id,
+      pair: `${order.asset}-${order.fiatCurrency}`,
+      side: order.side,
+      amount: order.amount,
+      price: order.price,
+      orderType: orderData.orderType || 'LIMIT',
+      status: matches.length > 0 ? 'FILLED' : 'OPEN',
+      timestamp: order.timestamp
+    };
+  }
+
+  async cancelOrder(orderId: string, userId: string): Promise<boolean> {
+    try {
+      // Check if order exists and belongs to user
+      const order = await this.prisma.p2PAd.findFirst({
+        where: { id: orderId, userId, status: { not: 'INACTIVE' } }
+      });
+
+      if (!order) return false;
+
+      // Update order status
+      await this.prisma.p2PAd.update({
+        where: { id: orderId },
+        data: { status: 'INACTIVE', updatedAt: new Date() }
+      });
+
+      // Remove from Redis order book
+      const pair = `${order.cryptoAsset}-${order.fiatCurrency}`;
+      await this.removeOrderFromBook(pair, order as any);
+
+      return true;
+    } catch (error) {
+      console.error('Cancel order error:', error);
+      return false;
+    }
+  }
+
+  async getOrderBook(pair: string, depth: number = 50) {
+    const snapshot = await this.getOrderBookSnapshot(pair);
+    
+    return {
+      pair,
+      bids: snapshot.bids.slice(0, depth),
+      asks: snapshot.asks.slice(0, depth),
+      lastPrice: snapshot.lastPrice,
+      spread: this.calculateSpread(snapshot),
+      timestamp: snapshot.timestamp
+    };
+  }
+
+  async getRecentTrades(pair: string, limit: number = 100) {
+    const trades = await this.prisma.p2PTrade.findMany({
+      where: { 
+        cryptoAsset: pair.split('-')[0],
+        fiatCurrency: pair.split('-')[1],
+        status: 'COMPLETED'
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        buyOrder: true,
+        sellOrder: true
+      }
+    });
+
+    return trades.map((trade: any) => ({
+      id: trade.id,
+      price: trade.price,
+      amount: trade.amount,
+      side: trade.buyOrder.userId === trade.sellOrder.userId ? 'UNKNOWN' : 'BUY',
+      timestamp: trade.createdAt.getTime(),
+      maker: trade.sellOrder.userId,
+      taker: trade.buyOrder.userId
+    }));
+  }
+
+  getAdvancedMetrics() {
+    return {
+      ...this.metrics,
+      volume24h: 0, // TODO: Calculate from trades
+      ordersProcessed: this.metrics.totalMatches,
+      averageLatency: this.metrics.averageMatchLatency,
+      activeOrders: 0, // TODO: Calculate from Redis
+      tradingPairs: 0, // TODO: Calculate active pairs
+      lastUpdate: Date.now(),
+      // Additional metrics for advanced trading routes
+      totalOrders: this.metrics.totalMatches,
+      totalTrades: this.metrics.totalMatches,
+      totalVolume: 0,
+      averageSpread: 0,
+      matchingLatency: this.metrics.averageMatchLatency,
+      ordersPerSecond: 0,
+      tradesPerSecond: 0,
+      orderBookDepth: {},
+      priceMovements: {}
+    };
+  }
+
+  private calculateSpread(snapshot: OrderBookSnapshot): string {
+    if (!snapshot.bids.length || !snapshot.asks.length) return '0';
+    
+    const bestBid = parseFloat(snapshot.bids[0].price);
+    const bestAsk = parseFloat(snapshot.asks[0].price);
+    const spread = bestAsk - bestBid;
+    
+    return spread.toString();
   }
 
   getMetrics() {

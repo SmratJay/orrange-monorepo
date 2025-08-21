@@ -8,7 +8,7 @@ export async function requestLogger(
   const startTime = Date.now();
 
   // Log request
-  request.log.info({
+  console.log('Request:', {
     method: request.method,
     url: request.url,
     headers: {
@@ -19,17 +19,14 @@ export async function requestLogger(
   });
 
   // Hook into response to log completion
-  reply.addHook('onSend', async (request, reply, payload) => {
+  reply.raw.on('finish', () => {
     const duration = Date.now() - startTime;
     
-    request.log.info({
+    console.log('Response:', {
       method: request.method,
       url: request.url,
       statusCode: reply.statusCode,
       duration: `${duration}ms`,
-      responseSize: payload ? Buffer.byteLength(payload.toString()) : 0
     });
-
-    return payload;
   });
 }

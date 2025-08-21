@@ -1,139 +1,103 @@
-// Escrow Service for Orrange P2P API
 import { PrismaClient } from '@prisma/client';
-
-export interface EscrowTransaction {
-  id: string;
-  orderId: string;
-  buyerId: string;
-  sellerId: string;
-  amount: number;
-  currency: string;
-  status: 'PENDING' | 'FUNDED' | 'RELEASED' | 'REFUNDED' | 'DISPUTED';
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { ethers } from 'ethers';
 
 export class EscrowService {
   private prisma: PrismaClient;
+  private provider: ethers.JsonRpcProvider;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
+    // Initialize with a default RPC provider - should be configured via env
+    this.provider = new ethers.JsonRpcProvider(
+      process.env.RPC_URL || 'https://rpc.ankr.com/eth'
+    );
   }
 
-  async createEscrow(data: {
-    orderId: string;
-    buyerId: string;
-    sellerId: string;
-    amount: number;
-    currency: string;
-  }): Promise<EscrowTransaction> {
+  async createEscrow(tradeId: string, amount: string, cryptoAsset: string, chainId: number = 1) {
     try {
-      // TODO: Implement actual escrow creation in database
-      const escrow: EscrowTransaction = {
-        id: `escrow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        orderId: data.orderId,
-        buyerId: data.buyerId,
-        sellerId: data.sellerId,
-        amount: data.amount,
-        currency: data.currency,
-        status: 'PENDING',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+      // Create escrow record in database
+      const escrow = await this.prisma.p2PEscrow.create({
+        data: {
+          tradeId,
+          contractAddress: '', // Will be updated after deployment
+          cryptoAsset,
+          amount: amount,
+          chainId,
+          status: 'CREATED',
+        },
+      });
 
-      console.log(`🔒 Escrow created: ${escrow.id} for ${escrow.amount} ${escrow.currency}`);
       return escrow;
-
     } catch (error) {
-      console.error('Error creating escrow:', error);
-      throw new Error('Failed to create escrow');
+      console.error('Failed to create escrow:', error);
+      throw new Error('Escrow creation failed');
     }
   }
 
-  async fundEscrow(escrowId: string): Promise<boolean> {
+  async fundEscrow(escrowId: string, txHash: string) {
     try {
-      // TODO: Implement actual escrow funding
-      console.log(`💰 Escrow funded: ${escrowId}`);
-      return true;
+      const escrow = await this.prisma.p2PEscrow.update({
+        where: { id: escrowId },
+        data: {
+          fundTxHash: txHash,
+          fundedAt: new Date(),
+          status: 'FUNDED',
+        },
+      });
 
+      return escrow;
     } catch (error) {
-      console.error('Error funding escrow:', error);
-      return false;
+      console.error('Failed to fund escrow:', error);
+      throw new Error('Escrow funding failed');
     }
   }
 
-  async releaseEscrow(escrowId: string, releasedBy: string): Promise<boolean> {
+  async releaseEscrow(escrowId: string, txHash: string) {
     try {
-      // TODO: Implement actual escrow release
-      console.log(`✅ Escrow released: ${escrowId} by ${releasedBy}`);
-      return true;
+      const escrow = await this.prisma.p2PEscrow.update({
+        where: { id: escrowId },
+        data: {
+          releaseTxHash: txHash,
+          releasedAt: new Date(),
+          status: 'RELEASED',
+        },
+      });
 
+      return escrow;
     } catch (error) {
-      console.error('Error releasing escrow:', error);
-      return false;
+      console.error('Failed to release escrow:', error);
+      throw new Error('Escrow release failed');
     }
   }
 
-  async refundEscrow(escrowId: string, refundedBy: string): Promise<boolean> {
+  async refundEscrow(escrowId: string, txHash: string) {
     try {
-      // TODO: Implement actual escrow refund
-      console.log(`🔄 Escrow refunded: ${escrowId} by ${refundedBy}`);
-      return true;
+      const escrow = await this.prisma.p2PEscrow.update({
+        where: { id: escrowId },
+        data: {
+          refundTxHash: txHash,
+          refundedAt: new Date(),
+          status: 'REFUNDED',
+        },
+      });
 
+      return escrow;
     } catch (error) {
-      console.error('Error refunding escrow:', error);
-      return false;
+      console.error('Failed to refund escrow:', error);
+      throw new Error('Escrow refund failed');
     }
   }
 
-  async getEscrowStatus(escrowId: string): Promise<EscrowTransaction | null> {
+  async getEscrowStatus(tradeId: string) {
     try {
-      // TODO: Implement actual escrow status fetching
-      return null;
+      const escrow = await this.prisma.p2PEscrow.findUnique({
+        where: { tradeId },
+      });
 
+      return escrow;
     } catch (error) {
-      console.error('Error getting escrow status:', error);
-      return null;
-    }
-  }
-
-  async getEscrowsByUser(userId: string): Promise<EscrowTransaction[]> {
-    try {
-      // TODO: Implement actual escrow fetching by user
-      return [];
-
-    } catch (error) {
-      console.error('Error getting user escrows:', error);
-      return [];
-    }
-  }
-
-  async disputeEscrow(escrowId: string, disputedBy: string, reason: string): Promise<boolean> {
-    try {
-      // TODO: Implement actual escrow dispute
-      console.log(`⚠️ Escrow disputed: ${escrowId} by ${disputedBy} - Reason: ${reason}`);
-      return true;
-
-    } catch (error) {
-      console.error('Error disputing escrow:', error);
-      return false;
-    }
-  }
-
-  async resolveDispute(escrowId: string, resolution: 'RELEASE' | 'REFUND', resolvedBy: string): Promise<boolean> {
-    try {
-      // TODO: Implement actual dispute resolution
-      console.log(`⚖️ Escrow dispute resolved: ${escrowId} - ${resolution} by ${resolvedBy}`);
-      
-      if (resolution === 'RELEASE') {
-        return await this.releaseEscrow(escrowId, resolvedBy);
-      } else {
-        return await this.refundEscrow(escrowId, resolvedBy);
-      }
-
-    } catch (error) {
-      console.error('Error resolving dispute:', error);
-      return false;
+      console.error('Failed to get escrow status:', error);
+      throw new Error('Failed to retrieve escrow status');
     }
   }
 }

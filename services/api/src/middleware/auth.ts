@@ -2,7 +2,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 
 export interface AuthRequest extends FastifyRequest {
-  user?: {
+  user: {
     id: string;
     address: string;
   };
