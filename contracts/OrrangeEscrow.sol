@@ -121,6 +121,7 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
     error TradeNotFound();
     error InvalidTradeState(TradeState expected, TradeState actual);
     error UnauthorizedAccess();
+    error UnauthorizedSender();
     error InsufficientFunds();
     error TradeExpired();
     error InvalidSignature();
@@ -239,7 +240,37 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
     }
 
     /**
-     * @dev Complete trade with buyer confirmation
+     * @dev Seller confirms payment received and releases escrow
+     * @notice This is the primary P2P completion method - no admin needed
+     */
+    function confirmPaymentReceived(
+        bytes32 _tradeId
+    ) external nonReentrant whenNotPaused {
+        Trade storage trade = trades[_tradeId];
+        
+        // Only seller can confirm payment received
+        if (msg.sender != trade.seller) revert UnauthorizedSender();
+        if (trade.state != TradeState.ACTIVE) 
+            revert InvalidTradeState(TradeState.ACTIVE, trade.state);
+        if (block.timestamp > trade.expiresAt) revert TradeExpired();
+        
+        trade.state = TradeState.COMPLETED;
+        trade.lastActivityAt = block.timestamp;
+        
+        // Transfer tokens to buyer
+        IERC20 token = IERC20(trade.tokenAddress);
+        token.safeTransfer(trade.buyer, trade.amount);
+        token.safeTransfer(feeCollector, trade.platformFee);
+        token.safeTransfer(trade.seller, trade.securityDeposit); // Return security deposit
+        
+        totalEscrowedAmount -= (trade.amount + trade.platformFee + trade.securityDeposit);
+        
+        emit TradeCompleted(_tradeId, block.timestamp);
+    }
+
+    /**
+     * @dev Complete trade with buyer confirmation (ADMIN ONLY - for disputes)
+     * @notice This is backup method for disputed trades requiring admin intervention
      */
     function completeTrade(
         bytes32 _tradeId,
