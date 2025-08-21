@@ -72,12 +72,15 @@ model User {
   isOnline        Boolean      @default(false) @map("is_online")
   lastSeenAt      DateTime?    @map("last_seen_at")
   
+  // Soft Delete - CRITICAL for audit trail
+  deletedAt       DateTime?    @map("deleted_at")
+  
   // Metadata
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   lastActivity DateTime @default(now()) @map("last_activity")
   
-  // P2P Relations
+  // P2P Relations with SAFE delete constraints
   p2pAds              P2PAd[]
   p2pSellerTrades     P2PTrade[]   @relation("P2PTradeSeller")
   p2pBuyerTrades      P2PTrade[]   @relation("P2PTradeBuyer")
@@ -92,6 +95,10 @@ model User {
   @@index([trustScore])
   @@index([isP2PEnabled])
   @@index([country])
+  @@index([role]) // CRITICAL for admin queries
+  @@index([deletedAt]) // CRITICAL for soft delete queries
+  @@index([createdAt])
+  @@index([lastActivity])
   @@map("users")
 }
 
@@ -183,19 +190,21 @@ model P2PTrade {
   disputedAt      DateTime?     @map("disputed_at")
   expiresAt       DateTime      @map("expires_at") // Auto-cancel time
   
-  // Relations
-  ad              P2PAd         @relation(fields: [adId], references: [id])
-  seller          User          @relation("P2PTradeSeller", fields: [sellerId], references: [id])
-  buyer           User          @relation("P2PTradeBuyer", fields: [buyerId], references: [id])
+  // Relations with SAFE delete policies
+  ad              P2PAd         @relation(fields: [adId], references: [id], onDelete: Restrict)
+  seller          User          @relation("P2PTradeSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  buyer           User          @relation("P2PTradeBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
   escrow          P2PEscrow?
   chats           P2PChat[]
   disputes        P2PDispute[]
   
-  @@index([status])
+  @@index([status]) // CRITICAL for performance
   @@index([sellerId])
   @@index([buyerId])
   @@index([adId])
   @@index([createdAt])
+  @@index([cryptoAsset, fiatCurrency]) // CRITICAL for trading pair queries
+  @@index([paymentMethod])
   @@map("p2p_trades")
 }
 
@@ -323,11 +332,16 @@ model P2PPaymentMethod {
   updatedAt       DateTime      @updatedAt @map("updated_at")
   lastUsedAt      DateTime?     @map("last_used_at")
   
+  // Soft Delete Pattern - NEVER hard delete user data
+  deletedAt       DateTime? @map("deleted_at")
+  
   // Relations
-  user            User          @relation(fields: [userId], references: [id])
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   
   @@index([userId])
   @@index([type])
+  @@index([isActive])
+  @@index([deletedAt]) // Index for soft delete queries
   @@map("p2p_payment_methods")
 }
 
