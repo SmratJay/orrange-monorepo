@@ -17,14 +17,14 @@ import * as dotenv from 'dotenv';
 
 // Import routes
 import authRoutes from './routes/auth';
+import adminRoutes from './routes/admin';
 // TODO: Re-enable after database model alignment
 // import orderRoutes from './routes/orders';
 // import tradeRoutes from './routes/trades';
 // import userRoutes from './routes/users';
 // import disputeRoutes from './routes/disputes';
-// import adminRoutes from './routes/admin';
 // import webhookRoutes from './routes/webhooks';
-// import matchingRoutes from './routes/matching';
+// Note: Removed matching routes - P2P platform uses ad browsing instead
 
 // Import middleware
 import { authMiddleware } from './middleware/auth';
@@ -291,14 +291,15 @@ async function buildServer() {
 
     // Register routes
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
+    await fastify.register(adminRoutes, { prefix: '/api/v1/admin' });
+    
     // TODO: Fix and re-enable these routes after database model alignment
     // await fastify.register(orderRoutes, { prefix: '/api/v1/orders' });
     // await fastify.register(tradeRoutes, { prefix: '/api/v1/trades' });
     // await fastify.register(userRoutes, { prefix: '/api/v1/users' });
     // await fastify.register(disputeRoutes, { prefix: '/api/v1/disputes' });
-    // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' });
     // await fastify.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
-    // await fastify.register(matchingRoutes, { prefix: '/api/v1/matching' });
+    // Note: Removed matching routes - P2P platform uses ad browsing instead
 
     // WebSocket handlers
     fastify.register(async function (fastify) {

@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
 
 export interface NotificationData {
-  type: 'ORDER_MATCHED' | 'TRADE_COMPLETED' | 'PAYMENT_RECEIVED' | 'DISPUTE_CREATED';
+  type: 'ORDER_MATCHED' | 'TRADE_COMPLETED' | 'PAYMENT_RECEIVED' | 'DISPUTE_CREATED' | 'NEW_EVIDENCE' | 'DISPUTE_ASSIGNED' | 'DISPUTE_RESOLVED';
   title: string;
   message: string;
   userId: string;
@@ -106,6 +106,27 @@ export class NotificationService {
       message: 'A new dispute has been created for your order',
       userId,
       metadata: { disputeId }
+    });
+  }
+
+  // New arbitrator notification methods
+  async sendArbitratorNotification(arbitratorId: string, type: 'NEW_EVIDENCE' | 'DISPUTE_ASSIGNED', message: string): Promise<void> {
+    await this.sendNotification({
+      type,
+      title: type === 'NEW_EVIDENCE' ? 'New Evidence Submitted' : 'Dispute Assigned',
+      message,
+      userId: arbitratorId,
+      metadata: { arbitratorId }
+    });
+  }
+
+  async sendDisputeResolvedNotification(userId: string, disputeId: string, resolution: any): Promise<void> {
+    await this.sendNotification({
+      type: 'DISPUTE_RESOLVED',
+      title: 'Dispute Resolved',
+      message: `Your dispute has been resolved: ${resolution.resolutionType}`,
+      userId,
+      metadata: { disputeId, resolution }
     });
   }
 }

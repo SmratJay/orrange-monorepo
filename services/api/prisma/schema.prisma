@@ -165,9 +165,9 @@ model P2PTrade {
   fiatAmount      Decimal       @map("fiat_amount")
   exchangeRate    Decimal       @map("exchange_rate") // Rate at time of trade
   
-  // Payment Information
+  // Payment Information (Security: No sensitive data stored)
   paymentMethod   String        @map("payment_method")
-  paymentDetails  Json?         @map("payment_details") // Bank details, etc.
+  // NOTE: paymentDetails removed for security - exchanged via encrypted chat only
   
   // Trade Timeline
   status          P2PTradeStatus @default(PENDING)
@@ -299,24 +299,24 @@ model P2PDispute {
   @@map("p2p_disputes")
 }
 
-// P2P Payment Method model - User's configured payment methods
+// P2P Payment Method Reference model - Secure payment method references only
 model P2PPaymentMethod {
   id              String        @id @default(cuid())
   userId          String        @map("user_id")
   
-  // Payment Method Details
+  // Payment Method Metadata Only (No Sensitive Details)
   type            String        // BANK_TRANSFER, PAYPAL, UPI, etc.
-  name            String        // User-friendly name
-  details         Json          // Encrypted payment details
+  name            String        // User-friendly name (e.g., "My Bank Account")
+  displayName     String        @map("display_name") // Safe display (e.g., "****1234")
   
   // Geographical & Currency Support
   supportedCountries String[]   @map("supported_countries")
   supportedCurrencies String[]  @map("supported_currencies")
   
-  // Settings
+  // Settings (No actual payment details stored)
   isActive        Boolean       @default(true) @map("is_active")
   isVerified      Boolean       @default(false) @map("is_verified")
-  verificationHash String?      @map("verification_hash")
+  // NOTE: All sensitive payment details exchanged via encrypted P2P chat only
   
   // Metadata
   createdAt       DateTime      @default(now()) @map("created_at")
