@@ -27,7 +27,7 @@ import adminRoutes from './routes/admin';
 // Note: Removed matching routes - P2P platform uses ad browsing instead
 
 // Import middleware
-import { authMiddleware } from './middleware/auth';
+import { createAuthMiddleware, createOptionalAuthMiddleware, AuthService } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { validationMiddleware } from './middleware/validation';
@@ -35,8 +35,8 @@ import { validationMiddleware } from './middleware/validation';
 // Import services
 import { NotificationService } from './services/NotificationService';
 import { RateService } from './services/RateService';
-import { EscrowService } from './services/EscrowService';
-import { DisputeService } from './services/DisputeService';
+import { SecureEscrowService } from './services/SecureEscrowService';
+import { EnhancedDisputeService } from './services/DisputeService';
 // TODO: Re-enable after database model alignment
 // import MatchingEngine from './matching/engine';
 
@@ -251,8 +251,16 @@ async function buildServer() {
     // Initialize services
     const notificationService = new NotificationService(prisma, redis);
     const rateService = new RateService(redis);
-    const escrowService = new EscrowService(prisma);
-    const disputeService = new DisputeService(prisma, notificationService);
+    const escrowService = new SecureEscrowService(prisma, {
+      rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
+      contractAddress: process.env.ESCROW_CONTRACT || '0x0000000000000000000000000000000000000000'
+    });
+    const disputeService = new EnhancedDisputeService(prisma, notificationService);
+    
+    // Setup auth service and middleware
+    const authService = new AuthService(prisma, redis);
+    const authMiddleware = createAuthMiddleware(authService);
+    
     // Initialize matching engine
     // TODO: Re-enable after fixing database model alignment
     // const matchingEngine = new MatchingEngine(redis, prisma);
@@ -261,6 +269,8 @@ async function buildServer() {
     fastify.decorate('rateService', rateService);
     fastify.decorate('escrowService', escrowService);
     fastify.decorate('disputeService', disputeService);
+    fastify.decorate('authService', authService);
+    fastify.decorate('authMiddleware', authMiddleware);
     // fastify.decorate('matchingEngine', matchingEngine);
 
     // Health check endpoint

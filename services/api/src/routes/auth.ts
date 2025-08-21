@@ -3,14 +3,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { nanoid } from 'nanoid';
 
-// Extend Fastify types inline
-declare module 'fastify' {
-  interface FastifyInstance {
-    jwt: any;
-    redis: any;
-  }
-}
-
 const prisma = new PrismaClient();
 
 // Request interfaces

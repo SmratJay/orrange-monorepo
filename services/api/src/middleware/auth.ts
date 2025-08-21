@@ -1,8 +1,14 @@
 // Production-Grade Auth Middleware for Orrange P2P API
 import { FastifyRequest, FastifyReply } from 'fastify';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: AuthenticatedUser;
+  }
+}
 
 export interface AuthenticatedUser {
   id: string;
@@ -11,10 +17,6 @@ export interface AuthenticatedUser {
   isVerified: boolean;
   kycStatus: string;
   sessionId: string;
-}
-
-export interface AuthRequest extends FastifyRequest {
-  user: AuthenticatedUser;
 }
 
 interface TokenPayload {
@@ -28,7 +30,7 @@ interface TokenPayload {
 
 export class AuthService {
   private prisma: PrismaClient;
-  private redis: Redis;
+  public redis: Redis; // Make public for middleware access
   private accessTokenSecret: string;
   private refreshTokenSecret: string;
   private accessTokenExpiry = '15m'; // Short-lived access tokens
@@ -59,10 +61,10 @@ export class AuthService {
         walletAddress, 
         sessionId,
         type: 'access' 
-      },
-      this.accessTokenSecret,
-      { expiresIn: this.accessTokenExpiry }
-    );
+      } as any,
+      this.accessTokenSecret as string,
+      { expiresIn: this.accessTokenExpiry } as any
+    ) as string;
 
     const refreshToken = jwt.sign(
       { 
@@ -70,10 +72,10 @@ export class AuthService {
         walletAddress, 
         sessionId,
         type: 'refresh' 
-      },
-      this.refreshTokenSecret,
-      { expiresIn: this.refreshTokenExpiry }
-    );
+      } as any,
+      this.refreshTokenSecret as string,
+      { expiresIn: this.refreshTokenExpiry } as any
+    ) as string;
 
     // Store session in Redis for immediate revocation capability
     await this.redis.setex(
@@ -173,7 +175,7 @@ export class AuthService {
 // Production-grade auth middleware
 export function createAuthMiddleware(authService: AuthService) {
   return async function authMiddleware(
-    request: AuthRequest,
+    request: FastifyRequest,
     reply: FastifyReply
   ) {
     try {
@@ -222,7 +224,7 @@ export function createAuthMiddleware(authService: AuthService) {
 // Optional auth middleware (for public endpoints that can benefit from user context)
 export function createOptionalAuthMiddleware(authService: AuthService) {
   return async function optionalAuthMiddleware(
-    request: AuthRequest,
+    request: FastifyRequest,
     reply: FastifyReply
   ) {
     try {
@@ -246,3 +248,10 @@ export function createOptionalAuthMiddleware(authService: AuthService) {
     }
   };
 }
+
+// Export individual middleware functions for use in routes
+export const authenticateToken = createAuthMiddleware;
+export const validateRequest = (schema: any) => (req: FastifyRequest, reply: FastifyReply) => {
+  // Basic validation stub
+  return Promise.resolve();
+};

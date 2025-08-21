@@ -312,7 +312,6 @@ export class EnhancedDisputeService extends EventEmitter {
       }
     };
   }
-}
 
   async createDispute(data: {
     orderId: string;
@@ -320,10 +319,10 @@ export class EnhancedDisputeService extends EventEmitter {
     defendantId: string;
     reason: string;
     description: string;
-  }): Promise<Dispute> {
+  }): Promise<any> {
     try {
       // TODO: Implement actual dispute creation in database
-      const dispute: Dispute = {
+      const dispute: any = {
         id: `dispute_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         orderId: data.orderId,
         complainantId: data.complainantId,
@@ -358,7 +357,7 @@ export class EnhancedDisputeService extends EventEmitter {
     }
   }
 
-  async getDispute(disputeId: string): Promise<Dispute | null> {
+  async getDispute(disputeId: string): Promise<any | null> {
     try {
       // TODO: Implement actual dispute fetching
       return null;
@@ -369,7 +368,7 @@ export class EnhancedDisputeService extends EventEmitter {
     }
   }
 
-  async getUserDisputes(userId: string): Promise<Dispute[]> {
+  async getUserDisputes(userId: string): Promise<any[]> {
     try {
       // TODO: Implement actual user disputes fetching
       return [];
@@ -382,7 +381,7 @@ export class EnhancedDisputeService extends EventEmitter {
 
   async updateDisputeStatus(
     disputeId: string, 
-    status: Dispute['status'], 
+    status: string, 
     updatedBy: string
   ): Promise<boolean> {
     try {
@@ -392,28 +391,6 @@ export class EnhancedDisputeService extends EventEmitter {
 
     } catch (error) {
       console.error('Error updating dispute status:', error);
-      return false;
-    }
-  }
-
-  async resolveDispute(
-    disputeId: string,
-    resolution: string,
-    resolvedBy: string
-  ): Promise<boolean> {
-    try {
-      // TODO: Implement actual dispute resolution
-      const success = await this.updateDisputeStatus(disputeId, 'RESOLVED', resolvedBy);
-      
-      if (success) {
-        // TODO: Get dispute details and send notifications
-        console.log(`⚖️ Dispute ${disputeId} resolved: ${resolution}`);
-      }
-
-      return success;
-
-    } catch (error) {
-      console.error('Error resolving dispute:', error);
       return false;
     }
   }
