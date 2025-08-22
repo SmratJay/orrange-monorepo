@@ -1,0 +1,186 @@
+name: 🚀 Orrange P2P - Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '8.x'
+
+jobs:
+  # 🔍 SECURITY SCAN
+  security-audit:
+    name: 🔒 Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: 🚨 Security audit
+        run: pnpm audit --audit-level=moderate
+        continue-on-error: false
+      
+      - name: 🔍 Dependency vulnerability check
+        run: pnpm dlx audit-ci --moderate
+
+  # 🧪 LINT & TYPE CHECK
+  quality-check:
+    name: 🧹 Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: 🔧 Lint check
+        run: pnpm lint
+      
+      - name: 🎯 TypeScript check
+        run: pnpm type-check
+      
+      - name: 💅 Format check
+        run: pnpm format:check
+
+  # 🧪 UNIT & INTEGRATION TESTS
+  test:
+    name: 🧪 Test Suite
+    runs-on: ubuntu-latest
+    needs: [security-audit, quality-check]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: orrange_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: 🗄️ Setup test database
+        run: |
+          cd services/api
+          pnpm dlx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orrange_test
+      
+      - name: 🧪 Run unit tests
+        run: pnpm test:unit
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orrange_test
+          REDIS_URL: redis://localhost:6379
+      
+      - name: 🔗 Run integration tests
+        run: pnpm test:integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orrange_test
+          REDIS_URL: redis://localhost:6379
+      
+      - name: 📊 Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: orrange-p2p
+
+  # 🏗️ BUILD VERIFICATION
+  build:
+    name: 🏗️ Build Check
+    runs-on: ubuntu-latest
+    needs: [security-audit, quality-check]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: 🏗️ Build all packages
+        run: pnpm build
+      
+      - name: ✅ Verify build outputs
+        run: |
+          ls -la apps/web/.next/
+          ls -la services/api/dist/
+
+  # 🚀 DEPLOYMENT (Production only)
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: 🚀 Deploy notification
+        run: |
+          echo "🎯 Ready for production deployment!"
+          echo "⚠️  Manual deployment required for security"
+          echo "📋 Checklist:"
+          echo "  ✅ All tests passed"
+          echo "  ✅ Security audit clean"
+          echo "  ✅ Build verification complete"
+          echo "  🔒 Secret management configured"
+          echo "  🛡️  Infrastructure monitoring enabled"

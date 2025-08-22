@@ -85,7 +85,7 @@ export class P2PWebSocketHandler {
       });
 
       // Set up message handler
-      ws.on('message', (data) => this.handleMessage(ws, data));
+      ws.on('message', (data) => this.handleMessage(ws, Buffer.from(data as ArrayBuffer)));
 
       // Handle disconnect
       ws.on('close', () => this.handleDisconnect(userId));

@@ -17,14 +17,8 @@ import * as dotenv from 'dotenv';
 
 // Import routes
 import authRoutes from './routes/auth';
-import adminRoutes from './routes/admin';
-// TODO: Re-enable after database model alignment
-// import orderRoutes from './routes/orders';
-// import tradeRoutes from './routes/trades';
-// import userRoutes from './routes/users';
-// import disputeRoutes from './routes/disputes';
-// import webhookRoutes from './routes/webhooks';
-// Note: Removed matching routes - P2P platform uses ad browsing instead
+// import adminRoutes from './routes/admin'; // Disabled temporarily
+import p2pRoutes from './routes/p2p';
 
 // Import middleware
 import { createAuthMiddleware, createOptionalAuthMiddleware, AuthService } from './middleware/auth';
@@ -35,10 +29,9 @@ import { validationMiddleware } from './middleware/validation';
 // Import services
 import { NotificationService } from './services/NotificationService';
 import { RateService } from './services/RateService';
-import { SecureEscrowService } from './services/SecureEscrowService';
-import { EnhancedDisputeService } from './services/DisputeService';
-// TODO: Re-enable after database model alignment
-// import MatchingEngine from './matching/engine';
+// Disabled legacy services:
+// import { SecureEscrowService } from './services/SecureEscrowService';
+// import { EnhancedDisputeService } from './services/DisputeService';
 
 // Import queues
 import { emailQueue, smsQueue, blockchainQueue, matchingQueue } from './queues/index.js';
@@ -251,11 +244,13 @@ async function buildServer() {
     // Initialize services
     const notificationService = new NotificationService(prisma, redis);
     const rateService = new RateService(redis);
-    const escrowService = new SecureEscrowService(prisma, {
-      rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
-      contractAddress: process.env.ESCROW_CONTRACT || '0x0000000000000000000000000000000000000000'
-    });
-    const disputeService = new EnhancedDisputeService(prisma, notificationService);
+    
+    // TODO: Re-enable when services are properly implemented
+    // const escrowService = new SecureEscrowService(prisma, {
+    //   rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
+    //   contractAddress: process.env.ESCROW_CONTRACT || '0x0000000000000000000000000000000000000000'
+    // });
+    // const disputeService = new EnhancedDisputeService(prisma, notificationService);
     
     // Setup auth service and middleware
     const authService = new AuthService(prisma, redis);
@@ -267,8 +262,8 @@ async function buildServer() {
 
     fastify.decorate('notificationService', notificationService);
     fastify.decorate('rateService', rateService);
-    fastify.decorate('escrowService', escrowService);
-    fastify.decorate('disputeService', disputeService);
+    // fastify.decorate('escrowService', escrowService); // Disabled temporarily
+    // fastify.decorate('disputeService', disputeService); // Disabled temporarily
     fastify.decorate('authService', authService);
     fastify.decorate('authMiddleware', authMiddleware);
     // fastify.decorate('matchingEngine', matchingEngine);
@@ -301,7 +296,8 @@ async function buildServer() {
 
     // Register routes
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
-    await fastify.register(adminRoutes, { prefix: '/api/v1/admin' });
+    // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' }); // Disabled temporarily
+    await fastify.register(p2pRoutes, { prefix: '/api/v1/p2p' });
     
     // TODO: Fix and re-enable these routes after database model alignment
     // await fastify.register(orderRoutes, { prefix: '/api/v1/orders' });

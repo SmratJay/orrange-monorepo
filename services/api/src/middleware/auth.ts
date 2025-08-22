@@ -6,7 +6,7 @@ import Redis from 'ioredis';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: AuthenticatedUser;
+    userAuth?: AuthenticatedUser; // Renamed to avoid conflict with Fastify JWT
   }
 }
 

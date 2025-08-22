@@ -1,6 +1,6 @@
 // Enhanced Admin/Moderator API Routes for Orrange P2P Platform
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { EnhancedDisputeService } from '../services/DisputeService';
+// import { EnhancedDisputeService } from '../services/DisputeService'; // Disabled for now
 import { NotificationService } from '../services/NotificationService';
 import { PrismaClient } from '@prisma/client';
 

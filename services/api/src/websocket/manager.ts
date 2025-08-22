@@ -83,7 +83,7 @@ export class WebSocketManager extends EventEmitter {
 
       // Handle incoming messages
       socket.on('message', (data) => {
-        this.handleClientMessage(clientId, data);
+        this.handleClientMessage(clientId, Buffer.from(data as ArrayBuffer));
       });
 
       // Handle client disconnection
