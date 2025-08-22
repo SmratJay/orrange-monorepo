@@ -88,6 +88,15 @@ model User {
   p2pInitiatedDisputes P2PDispute[] @relation("P2PDisputeInitiator")
   p2pAssignedDisputes P2PDispute[]  @relation("P2PDisputeArbitrator")
   p2pPaymentMethods   P2PPaymentMethod[]
+  priceAlerts         PriceAlert[]
+  
+  // Trading Engine Relations
+  tradingOrders       TradingOrder[]
+  tradingBots         TradingBot[]
+  positions           Position[]
+  riskProfile         RiskProfile?
+  buyTrades           Trade[]      @relation("UserBuyTrades")
+  sellTrades          Trade[]      @relation("UserSellTrades")
   
   @@index([email])
   @@index([walletAddress])
@@ -345,6 +354,34 @@ model P2PPaymentMethod {
   @@map("p2p_payment_methods")
 }
 
+// Price Alert model - Real-time price notifications
+model PriceAlert {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  
+  // Alert Configuration
+  symbol      String    // BTC, ETH, etc.
+  condition   String    // ABOVE, BELOW, CHANGE
+  targetPrice Decimal   @map("target_price")
+  
+  // Status
+  isActive    Boolean   @default(true) @map("is_active")
+  triggered   Boolean   @default(false)
+  triggerredAt DateTime? @map("triggered_at")
+  
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([symbol])
+  @@index([isActive])
+  @@map("price_alerts")
+}
+
 // P2P Trading Enums
 enum P2PAdType {
   BUY
@@ -438,4 +475,182 @@ enum RiskLevel {
   HIGH
   EXTREME
   BLACKLISTED
+}
+
+// Trading Engine Enums
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP_LOSS
+  TAKE_PROFIT
+  STOP_LIMIT
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum TimeInForce {
+  GTC  // Good Till Canceled
+  IOC  // Immediate Or Cancel
+  FOK  // Fill Or Kill
+  DAY  // Day Order
+}
+
+enum OrderStatus {
+  PENDING
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum BotStrategy {
+  DCA           // Dollar Cost Averaging
+  GRID          // Grid Trading
+  ARBITRAGE
+  REBALANCE
+  MOMENTUM
+  MEAN_REVERSION
+}
+
+// Advanced Trading Models
+
+model TradingOrder {
+  id                String      @id @default(cuid())
+  userId            String      @map("user_id")
+  symbol            String
+  type              OrderType
+  side              OrderSide
+  quantity          Decimal     @db.Decimal(20, 8)
+  price             Decimal?    @db.Decimal(20, 8) // Optional for market orders
+  stopPrice         Decimal?    @db.Decimal(20, 8) @map("stop_price") // For stop orders
+  timeInForce       TimeInForce @default(GTC) @map("time_in_force")
+  status            OrderStatus @default(PENDING)
+  fillPrice         Decimal?    @db.Decimal(20, 8) @map("fill_price")
+  fillQuantity      Decimal     @default(0) @db.Decimal(20, 8) @map("fill_quantity")
+  remainingQuantity Decimal     @db.Decimal(20, 8) @map("remaining_quantity")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  expiresAt         DateTime?   @map("expires_at")
+
+  // Relations
+  user              User        @relation(fields: [userId], references: [id])
+  buyTrades         Trade[]     @relation("BuyTrades")
+  sellTrades        Trade[]     @relation("SellTrades")
+
+  @@map("trading_orders")
+  @@index([userId])
+  @@index([symbol])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Trade {
+  id          String    @id @default(cuid())
+  symbol      String
+  buyOrderId  String    @map("buy_order_id")
+  sellOrderId String    @map("sell_order_id")
+  buyUserId   String    @map("buy_user_id")
+  sellUserId  String    @map("sell_user_id")
+  price       Decimal   @db.Decimal(20, 8)
+  quantity    Decimal   @db.Decimal(20, 8)
+  timestamp   DateTime  @default(now())
+
+  // Relations
+  buyOrder    TradingOrder @relation("BuyTrades", fields: [buyOrderId], references: [id])
+  sellOrder   TradingOrder @relation("SellTrades", fields: [sellOrderId], references: [id])
+  buyUser     User         @relation("UserBuyTrades", fields: [buyUserId], references: [id])
+  sellUser    User         @relation("UserSellTrades", fields: [sellUserId], references: [id])
+
+  @@map("trades")
+  @@index([symbol])
+  @@index([buyUserId])
+  @@index([sellUserId])
+  @@index([timestamp])
+}
+
+model TradingBot {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  name          String
+  strategy      BotStrategy
+  symbol        String
+  isActive      Boolean     @default(false) @map("is_active")
+  config        Json        // Flexible config storage
+  performance   Json        // Performance metrics
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  user          User        @relation(fields: [userId], references: [id])
+
+  @@map("trading_bots")
+  @@index([userId])
+  @@index([strategy])
+  @@index([symbol])
+  @@index([isActive])
+}
+
+model Position {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  symbol        String
+  side          OrderSide
+  quantity      Decimal   @db.Decimal(20, 8)
+  averagePrice  Decimal   @db.Decimal(20, 8) @map("average_price")
+  unrealizedPnL Decimal   @default(0) @db.Decimal(20, 8) @map("unrealized_pnl")
+  realizedPnL   Decimal   @default(0) @db.Decimal(20, 8) @map("realized_pnl")
+  marginUsed    Decimal   @default(0) @db.Decimal(20, 8) @map("margin_used")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@map("positions")
+  @@index([userId])
+  @@index([symbol])
+  @@index([side])
+}
+
+model RiskProfile {
+  id                  String    @id @default(cuid())
+  userId              String    @unique @map("user_id")
+  totalPortfolioValue Decimal   @default(0) @db.Decimal(20, 8) @map("total_portfolio_value")
+  dailyPnL            Decimal   @default(0) @db.Decimal(20, 8) @map("daily_pnl")
+  weeklyPnL           Decimal   @default(0) @db.Decimal(20, 8) @map("weekly_pnl")
+  monthlyPnL          Decimal   @default(0) @db.Decimal(20, 8) @map("monthly_pnl")
+  maxDrawdown         Decimal   @default(0) @db.Decimal(20, 8) @map("max_drawdown")
+  riskScore           Int       @default(0) @map("risk_score") // 1-10 scale
+  marginUsed          Decimal   @default(0) @db.Decimal(20, 8) @map("margin_used")
+  marginAvailable     Decimal   @default(0) @db.Decimal(20, 8) @map("margin_available")
+  maxPositionSize     Decimal?  @db.Decimal(20, 8) @map("max_position_size")
+  dailyLossLimit      Decimal?  @db.Decimal(20, 8) @map("daily_loss_limit")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user                User      @relation(fields: [userId], references: [id])
+
+  @@map("risk_profiles")
+}
+
+model MarketData {
+  id        String    @id @default(cuid())
+  symbol    String
+  price     Decimal   @db.Decimal(20, 8)
+  volume    Decimal   @db.Decimal(20, 8)
+  change24h Decimal   @db.Decimal(10, 4) @map("change_24h")
+  high24h   Decimal   @db.Decimal(20, 8) @map("high_24h")
+  low24h    Decimal   @db.Decimal(20, 8) @map("low_24h")
+  timestamp DateTime  @default(now())
+
+  @@map("market_data")
+  @@index([symbol])
+  @@index([timestamp])
 }

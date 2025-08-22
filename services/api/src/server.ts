@@ -19,6 +19,10 @@ import * as dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 // import adminRoutes from './routes/admin'; // Disabled temporarily
 import p2pRoutes from './routes/p2p';
+import marketDataRoutes from './routes/market-data';
+import tradingEngineRoutes from './routes/trading-engine';
+// Phase 3C Security Routes
+import { securityRoutes } from './routes/security.js';
 
 // Import middleware
 import { createAuthMiddleware, createOptionalAuthMiddleware, AuthService } from './middleware/auth';
@@ -32,6 +36,14 @@ import { RateService } from './services/RateService';
 // Disabled legacy services:
 // import { SecureEscrowService } from './services/SecureEscrowService';
 // import { EnhancedDisputeService } from './services/DisputeService';
+
+// Phase 3C Enhanced Security Services
+import { SecurityService } from './services/SecurityService.js';
+import { FraudDetectionService } from './services/FraudDetectionService.js';
+import { AuditService } from './services/AuditService.js';
+import { SecurityDashboardService, createSecurityDashboard } from './services/SecurityDashboardService.js';
+import { WebSocketSecurityService, createWebSocketSecurityService } from './websocket/SecurityWebSocket.js';
+import { SecurityMiddleware, createSecurityMiddleware, registerSecurityMiddleware } from './middleware/security.js';
 
 // Import queues
 import { emailQueue, smsQueue, blockchainQueue, matchingQueue } from './queues/index.js';
@@ -87,6 +99,19 @@ const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}, starting graceful shutdown`);
   
   try {
+    // Stop Phase 3C Security Services first
+    logger.info('Stopping Phase 3C Security Services...');
+    const server = await buildServer(); // Get instance for cleanup
+    const securityDashboard = (server as any).securityDashboard;
+    const wsSecurityService = (server as any).wsSecurityService;
+    
+    if (securityDashboard) {
+      securityDashboard.stopMonitoring();
+    }
+    if (wsSecurityService) {
+      await wsSecurityService.stop();
+    }
+    
     // Close Fastify server
     await fastify.close();
     
@@ -245,6 +270,15 @@ async function buildServer() {
     const notificationService = new NotificationService(prisma, redis);
     const rateService = new RateService(redis);
     
+    // Phase 3C Enhanced Security Services
+    console.log('🛡️  Initializing Phase 3C Enhanced Security Services...');
+    const securityService = new SecurityService(prisma, redis);
+    const fraudDetectionService = new FraudDetectionService(prisma, redis);
+    const auditService = new AuditService(prisma);
+    const securityDashboard = createSecurityDashboard(securityService, fraudDetectionService, auditService);
+    const wsSecurityService = createWebSocketSecurityService(securityDashboard, auditService, securityService, 8080);
+    const securityMiddleware = createSecurityMiddleware(securityService, fraudDetectionService, auditService);
+    
     // TODO: Re-enable when services are properly implemented
     // const escrowService = new SecureEscrowService(prisma, {
     //   rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
@@ -267,6 +301,25 @@ async function buildServer() {
     fastify.decorate('authService', authService);
     fastify.decorate('authMiddleware', authMiddleware);
     // fastify.decorate('matchingEngine', matchingEngine);
+    
+    // Phase 3C Security Services
+    fastify.decorate('securityService', securityService);
+    fastify.decorate('fraudDetectionService', fraudDetectionService);
+    fastify.decorate('auditService', auditService);
+    fastify.decorate('securityDashboard', securityDashboard);
+    fastify.decorate('wsSecurityService', wsSecurityService);
+    fastify.decorate('securityMiddleware', securityMiddleware);
+
+    // Register Phase 3C Security Middleware
+    registerSecurityMiddleware(fastify, securityMiddleware, {
+      enableRateLimit: false, // Using existing Fastify rate limit
+      enableIPControl: false,
+      enableMFA: true,
+      enableDeviceFingerprint: true,
+      enableFraudDetection: true,
+      enableSecurityHeaders: true,
+      enableSessionSecurity: true
+    });
 
     // Health check endpoint
     fastify.get('/health', {
@@ -298,6 +351,13 @@ async function buildServer() {
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
     // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' }); // Disabled temporarily
     await fastify.register(p2pRoutes, { prefix: '/api/v1/p2p' });
+    await fastify.register(marketDataRoutes, { prefix: '/api/v1/market' });
+    await fastify.register(tradingEngineRoutes, { prefix: '/api/v1/trading' });
+    
+    // Phase 3C Security Routes
+    await fastify.register(async function (fastify) {
+      await securityRoutes(fastify, securityService, fraudDetectionService, auditService);
+    }, { prefix: '/api/v1/security' });
     
     // TODO: Fix and re-enable these routes after database model alignment
     // await fastify.register(orderRoutes, { prefix: '/api/v1/orders' });
@@ -307,12 +367,24 @@ async function buildServer() {
     // await fastify.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
     // Note: Removed matching routes - P2P platform uses ad browsing instead
 
-    // WebSocket handlers
+    // WebSocket handlers  
     fastify.register(async function (fastify) {
+      // Legacy WebSocket handler
       fastify.get('/ws', { websocket: true }, (connection, req) => {
         connection.on('message', (message: Buffer) => {
           // Handle WebSocket messages
           connection.send('Echo: ' + message.toString());
+        });
+      });
+      
+      // Phase 3C Security WebSocket endpoint
+      fastify.get('/security-ws', { websocket: true }, (connection, req) => {
+        // Security WebSocket connections are handled by SecurityWebSocket service
+        connection.on('message', (message: Buffer) => {
+          connection.send(JSON.stringify({
+            type: 'info',
+            message: 'Security WebSocket connected - use dedicated security server on port 8080'
+          }));
         });
       });
     });
@@ -321,6 +393,12 @@ async function buildServer() {
     await rateService.start();
     // TODO: Re-enable after fixing MatchingEngine
     // await matchingEngine.start();
+    
+    // Start Phase 3C Security Services
+    console.log('🚀 Starting Phase 3C Security Services...');
+    await securityDashboard.startMonitoring(10000); // 10 second intervals
+    await wsSecurityService.start();
+    console.log('✅ Phase 3C Enhanced Security System activated!');
 
     return fastify;
   } catch (error) {
