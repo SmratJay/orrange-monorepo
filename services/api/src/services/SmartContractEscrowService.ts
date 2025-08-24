@@ -1,22 +1,33 @@
 /**
- * Smart Contract Escrow Service - Phase 3D Implementation
- * Blockchain-Based Automated Escrow Management System
+ * Smart Contract Escrow Service - Phase 3D Implementation  
+ * P2P Cryptocurrency Trading Escrow System
  * 
  * Features:
  * - Ethereum smart contract integration
  * - Multi-signature wallet support
- * - Automated dispute resolution
- * - Partial payment releases
- * - Insurance integration
+ * - Automated dispute resolution 
  * - Cross-chain compatibility
  * - Gas optimization
+ * 
+ * NOTE: Pure P2P crypto platform - NO traditional payment processing
  */
 
-import { ethers, Contract, Wallet, providers } from 'ethers';
+import { ethers, Contract, Wallet } from 'ethers';
 import { EventEmitter } from 'events';
 import { SecurityService } from './SecurityService.js';
 import { AuditService, AuditEventType, AuditSeverity } from './AuditService.js';
-import { PaymentGatewayService, Currency } from './PaymentGatewayService.js';
+
+/**
+ * Currency Types (Crypto Only - No Traditional Finance)
+ */
+export enum Currency {
+  ETH = 'ETH',
+  USDT = 'USDT', 
+  USDC = 'USDC',
+  BTC = 'BTC',
+  MATIC = 'MATIC',
+  BNB = 'BNB'
+}
 
 /**
  * Escrow Status Types
@@ -51,7 +62,8 @@ export enum BlockchainNetwork {
   ETHEREUM_SEPOLIA = 'ETHEREUM_SEPOLIA',
   POLYGON = 'POLYGON',
   BSC = 'BSC',
-  ARBITRUM = 'ARBITRUM'
+  ARBITRUM = 'ARBITRUM',
+  HARDHAT = 'HARDHAT'
 }
 
 /**
@@ -104,9 +116,9 @@ export interface MultiSigConfig {
  * Smart Contract Escrow Service
  */
 export class SmartContractEscrowService extends EventEmitter {
-  private provider: providers.JsonRpcProvider;
-  private wallet: Wallet;
-  private escrowContract: Contract;
+  private provider!: ethers.JsonRpcProvider;
+  private wallet!: Wallet;
+  private escrowContract!: Contract;
   private multiSigContract?: Contract;
 
   // Network configurations
@@ -120,8 +132,8 @@ export class SmartContractEscrowService extends EventEmitter {
   // Gas optimization settings
   private gasSettings = {
     gasLimit: 500000,
-    maxFeePerGas: ethers.utils.parseUnits('50', 'gwei'),
-    maxPriorityFeePerGas: ethers.utils.parseUnits('2', 'gwei')
+    maxFeePerGas: ethers.parseUnits('50', 'gwei'),
+    maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei')
   };
 
   // Active escrows tracking
@@ -133,7 +145,6 @@ export class SmartContractEscrowService extends EventEmitter {
     private redis: any,
     private securityService: SecurityService,
     private auditService: AuditService,
-    private paymentGatewayService: PaymentGatewayService,
     private config: {
       privateKey: string;
       rpcUrl: string;
@@ -153,24 +164,37 @@ export class SmartContractEscrowService extends EventEmitter {
   private async initializeNetwork(): Promise<void> {
     try {
       // Initialize provider and wallet
-      this.provider = new providers.JsonRpcProvider(this.config.rpcUrl);
+      this.provider = new ethers.JsonRpcProvider(this.config.rpcUrl);
       this.wallet = new Wallet(this.config.privateKey, this.provider);
 
-      // Load escrow contract ABI (simplified for demo)
+      // Load OrrangeEscrow contract ABI (updated to match deployed contract)
       const escrowABI = [
-        "function createEscrow(string orderId, address buyer, address seller, uint256 amount) external payable returns (uint256)",
-        "function fundEscrow(uint256 escrowId) external payable",
-        "function releaseEscrow(uint256 escrowId) external",
-        "function refundEscrow(uint256 escrowId) external",
-        "function disputeEscrow(uint256 escrowId, string reason) external",
-        "function resolveDispute(uint256 escrowId, uint8 resolution, uint256 refundAmount) external",
-        "function getEscrow(uint256 escrowId) external view returns (tuple(string orderId, address buyer, address seller, uint256 amount, uint8 status, uint256 createdAt, uint256 expiresAt))",
-        "event EscrowCreated(uint256 indexed escrowId, string orderId, address buyer, address seller, uint256 amount)",
-        "event EscrowFunded(uint256 indexed escrowId, uint256 amount)",
-        "event EscrowReleased(uint256 indexed escrowId, address recipient, uint256 amount)",
-        "event EscrowRefunded(uint256 indexed escrowId, address recipient, uint256 amount)",
-        "event DisputeRaised(uint256 indexed escrowId, address initiator, string reason)",
-        "event DisputeResolved(uint256 indexed escrowId, uint8 resolution, uint256 refundAmount)"
+        // Core Trading Functions
+        "function createTrade(bytes32 _tradeId, address _buyer, address _tokenAddress, uint256 _amount, uint256 _platformFee, uint256 _securityDeposit, uint256 _expiresAt, bytes32 _paymentHash) external nonpayable",
+        "function confirmPaymentReceived(bytes32 _tradeId) external nonpayable",
+        "function cancelExpiredTrade(bytes32 _tradeId) external nonpayable",
+        
+        // View Functions
+        "function getTrade(bytes32 _tradeId) external view returns (tuple(bytes32 tradeId, address seller, address buyer, address tokenAddress, uint256 amount, uint256 platformFee, uint256 securityDeposit, uint256 createdAt, uint256 expiresAt, uint256 lastActivityAt, uint8 state, bytes32 paymentHash))",
+        "function tradeExists(bytes32 _tradeId) external view returns (bool)",
+        "function whitelistedTokens(address) external view returns (bool)",
+        
+        // Admin Functions  
+        "function whitelistToken(address _token, bool _whitelisted) external nonpayable",
+        "function owner() external view returns (address)",
+        "function paused() external view returns (bool)",
+        "function feeCollector() external view returns (address)",
+        "function platformFeePercent() external view returns (uint256)",
+        
+        // Emergency Functions
+        "function emergencyPause() external nonpayable",
+        "function emergencyUnpause() external nonpayable",
+        
+        // Events
+        "event TradeCreated(bytes32 indexed tradeId, address indexed seller, address indexed buyer, address tokenAddress, uint256 amount, uint256 expiresAt)",
+        "event PaymentConfirmed(bytes32 indexed tradeId, address indexed buyer, uint256 confirmedAt)",
+        "event TradeRefunded(bytes32 indexed tradeId, uint256 refundedAt)",
+        "event TokenWhitelisted(address indexed token, bool whitelisted)"
       ];
 
       this.escrowContract = new Contract(this.config.contractAddress, escrowABI, this.wallet);
@@ -242,7 +266,7 @@ export class SmartContractEscrowService extends EventEmitter {
       }
 
       // Convert amount to Wei (assuming ETH for now)
-      const amountWei = ethers.utils.parseEther(amount.toString());
+      const amountWei = ethers.parseEther(amount.toString());
       
       // Get buyer and seller wallet addresses (would be stored in user profiles)
       const buyerAddress = await this.getUserWalletAddress(buyerId);
@@ -354,47 +378,22 @@ export class SmartContractEscrowService extends EventEmitter {
 
       let fundingTx;
 
-      if (fundingSource === 'wallet') {
-        // Direct wallet funding
-        const amountWei = ethers.utils.parseEther(escrow.amount.toString());
-        
-        fundingTx = await this.escrowContract.fundEscrow(escrowId, {
-          value: amountWei,
-          gasLimit: this.gasSettings.gasLimit,
-          maxFeePerGas: this.gasSettings.maxFeePerGas,
-          maxPriorityFeePerGas: this.gasSettings.maxPriorityFeePerGas
-        });
-
-      } else {
-        // Payment gateway integration
-        const paymentRequest = {
-          id: `escrow_fund_${escrowId}`,
-          userId: escrow.buyerId,
-          orderId: escrow.orderId,
-          amount: escrow.amount,
-          currency: escrow.currency,
-          paymentMethod: 'CREDIT_CARD' as any,
-          customerInfo: {
-            email: 'buyer@example.com', // Would get from user profile
-            name: 'Buyer Name'
-          },
-          metadata: {
-            escrowId,
-            purpose: 'escrow_funding'
-          }
-        };
-
-        const paymentResult = await this.paymentGatewayService.processPayment(paymentRequest);
-        
-        if (paymentResult.status !== 'COMPLETED') {
-          throw new Error('Payment failed for escrow funding');
-        }
-
-        // After successful payment, fund the contract
-        fundingTx = await this.escrowContract.fundEscrow(escrowId, {
-          gasLimit: this.gasSettings.gasLimit
-        });
-      }
+      // Pure P2P crypto platform - Direct smart contract funding only
+      // Direct wallet funding with crypto
+      const amountWei = ethers.parseEther(escrow.amount.toString());
+      
+      console.log('Funding escrow directly via smart contract', { 
+        escrowId, 
+        amount: escrow.amount.toString(),
+        amountWei: amountWei.toString() 
+      });
+      
+      fundingTx = await this.escrowContract.fundEscrow(escrowId, {
+        value: amountWei,
+        gasLimit: this.gasSettings.gasLimit,
+        maxFeePerGas: this.gasSettings.maxFeePerGas,
+        maxPriorityFeePerGas: this.gasSettings.maxPriorityFeePerGas
+      });
 
       await fundingTx.wait(1);
 
@@ -444,7 +443,7 @@ export class SmartContractEscrowService extends EventEmitter {
 
       if (partialAmount && partialAmount < escrow.amount) {
         // Partial release implementation
-        const partialAmountWei = ethers.utils.parseEther(partialAmount.toString());
+        const partialAmountWei = ethers.parseEther(partialAmount.toString());
         releaseTx = await this.escrowContract.partialRelease(escrowId, partialAmountWei, {
           gasLimit: this.gasSettings.gasLimit
         });
@@ -602,7 +601,7 @@ export class SmartContractEscrowService extends EventEmitter {
         orderId: escrowData.orderId,
         buyerId: '', // Would need to map from address
         sellerId: '', // Would need to map from address
-        amount: parseFloat(ethers.utils.formatEther(escrowData.amount)),
+        amount: parseFloat(ethers.formatEther(escrowData.amount)),
         currency: Currency.ETH, // Assuming ETH for now
         contractAddress: this.config.contractAddress,
         transactionHash: '',
@@ -633,14 +632,15 @@ export class SmartContractEscrowService extends EventEmitter {
     disputeEscrow: string;
   }> {
     try {
-      const gasPrice = await this.provider.getGasPrice();
+      const feeData = await this.provider.getFeeData();
+      const gasPrice = feeData.gasPrice || ethers.parseUnits('20', 'gwei'); // fallback
       
       return {
-        createEscrow: ethers.utils.formatEther(gasPrice.mul(200000)), // Estimated gas
-        fundEscrow: ethers.utils.formatEther(gasPrice.mul(150000)),
-        releaseEscrow: ethers.utils.formatEther(gasPrice.mul(100000)),
-        refundEscrow: ethers.utils.formatEther(gasPrice.mul(100000)),
-        disputeEscrow: ethers.utils.formatEther(gasPrice.mul(120000))
+        createEscrow: ethers.formatEther(gasPrice * BigInt(200000)), // Estimated gas
+        fundEscrow: ethers.formatEther(gasPrice * BigInt(150000)),
+        releaseEscrow: ethers.formatEther(gasPrice * BigInt(100000)),
+        refundEscrow: ethers.formatEther(gasPrice * BigInt(100000)),
+        disputeEscrow: ethers.formatEther(gasPrice * BigInt(120000))
       };
     } catch (error) {
       console.error('Failed to get gas estimates:', error);
@@ -659,24 +659,24 @@ export class SmartContractEscrowService extends EventEmitter {
   // ===================
 
   private setupContractEventListeners(): void {
-    this.escrowContract.on('EscrowCreated', (escrowId, orderId, buyer, seller, amount, event) => {
-      console.log(`📄 Contract Event - Escrow Created: ${escrowId}`);
-      this.emit('contractEscrowCreated', { escrowId, orderId, buyer, seller, amount, event });
+    this.escrowContract.on('TradeCreated', (tradeId, seller, buyer, tokenAddress, amount, expiresAt, event) => {
+      console.log(`📄 Contract Event - Trade Created: ${tradeId}`);
+      this.emit('contractTradeCreated', { tradeId, seller, buyer, tokenAddress, amount, expiresAt, event });
     });
 
-    this.escrowContract.on('EscrowFunded', (escrowId, amount, event) => {
-      console.log(`💰 Contract Event - Escrow Funded: ${escrowId}`);
-      this.emit('contractEscrowFunded', { escrowId, amount, event });
+    this.escrowContract.on('PaymentConfirmed', (tradeId, buyer, confirmedAt, event) => {
+      console.log(`✅ Contract Event - Payment Confirmed: ${tradeId}`);
+      this.emit('contractPaymentConfirmed', { tradeId, buyer, confirmedAt, event });
     });
 
-    this.escrowContract.on('EscrowReleased', (escrowId, recipient, amount, event) => {
-      console.log(`🔓 Contract Event - Escrow Released: ${escrowId}`);
-      this.emit('contractEscrowReleased', { escrowId, recipient, amount, event });
+    this.escrowContract.on('TradeRefunded', (tradeId, refundedAt, event) => {
+      console.log(`� Contract Event - Trade Refunded: ${tradeId}`);
+      this.emit('contractTradeRefunded', { tradeId, refundedAt, event });
     });
 
-    this.escrowContract.on('DisputeRaised', (escrowId, initiator, reason, event) => {
-      console.log(`⚖️ Contract Event - Dispute Raised: ${escrowId}`);
-      this.emit('contractDisputeRaised', { escrowId, initiator, reason, event });
+    this.escrowContract.on('TokenWhitelisted', (token, whitelisted, event) => {
+      console.log(`🔐 Contract Event - Token Whitelist Updated: ${token} - ${whitelisted}`);
+      this.emit('contractTokenWhitelisted', { token, whitelisted, event });
     });
   }
 
@@ -729,7 +729,6 @@ export function createSmartContractEscrowService(
   redis: any,
   securityService: SecurityService,
   auditService: AuditService,
-  paymentGatewayService: PaymentGatewayService,
   config: {
     privateKey: string;
     rpcUrl: string;
@@ -742,7 +741,6 @@ export function createSmartContractEscrowService(
     redis,
     securityService,
     auditService,
-    paymentGatewayService,
     config
   );
 }

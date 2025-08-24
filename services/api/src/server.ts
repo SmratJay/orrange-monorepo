@@ -15,14 +15,18 @@ import { FastifyAdapter } from '@bull-board/fastify';
 import * as winston from 'winston';
 import * as dotenv from 'dotenv';
 
-// Import routes
+// Import API routes
 import authRoutes from './routes/auth';
 // import adminRoutes from './routes/admin'; // Disabled temporarily
 import p2pRoutes from './routes/p2p';
+import p2pTradingRoutes from './routes/p2p-trading';
+import advancedP2PRoutes from './routes/advanced-p2p';
 import marketDataRoutes from './routes/market-data';
 import tradingEngineRoutes from './routes/trading-engine';
 // Phase 3C Security Routes
 import { securityRoutes } from './routes/security.js';
+// Phase 3D Advanced Routes - TODO: Convert from Express to Fastify pattern
+// import { phase3dRoutes } from './routes/phase3d.js';
 
 // Import middleware
 import { createAuthMiddleware, createOptionalAuthMiddleware, AuthService } from './middleware/auth';
@@ -44,6 +48,16 @@ import { AuditService } from './services/AuditService.js';
 import { SecurityDashboardService, createSecurityDashboard } from './services/SecurityDashboardService.js';
 import { WebSocketSecurityService, createWebSocketSecurityService } from './websocket/SecurityWebSocket.js';
 import { SecurityMiddleware, createSecurityMiddleware, registerSecurityMiddleware } from './middleware/security.js';
+
+// Phase 3D Advanced Services - SmartContractEscrowService now clean (PaymentGateway removed)
+import { SmartContractEscrowService, createSmartContractEscrowService, BlockchainNetwork } from './services/SmartContractEscrowService.js';
+// PaymentGatewayService removed - pure P2P crypto platform
+
+// Phase 3 Advanced P2P Trading Services
+import P2PMatchingEngine from './services/P2PMatchingEngine.js';
+import P2POrderManagementService from './services/P2POrderManagementService.js';
+import P2PMarketDataService from './services/P2PMarketDataService.js';
+import P2PRealtimeService from './services/P2PRealtimeService.js';
 
 // Import queues
 import { emailQueue, smsQueue, blockchainQueue, matchingQueue } from './queues/index.js';
@@ -274,10 +288,55 @@ async function buildServer() {
     console.log('🛡️  Initializing Phase 3C Enhanced Security Services...');
     const securityService = new SecurityService(prisma, redis);
     const fraudDetectionService = new FraudDetectionService(prisma, redis);
-    const auditService = new AuditService(prisma);
+    const auditService = new AuditService(prisma, redis); // Fixed: added redis parameter
     const securityDashboard = createSecurityDashboard(securityService, fraudDetectionService, auditService);
     const wsSecurityService = createWebSocketSecurityService(securityDashboard, auditService, securityService, 8080);
     const securityMiddleware = createSecurityMiddleware(securityService, fraudDetectionService, auditService);
+    
+    // TODO: Phase 3D Advanced Services - Enable after fixing compilation issues
+    // console.log('🔗 Initializing Phase 3D Smart Contract Services...');
+    // PaymentGatewayService removed - pure P2P crypto platform  
+    const smartContractEscrowService = createSmartContractEscrowService(
+      prisma,
+      redis,
+      securityService,
+      auditService,
+      {
+        privateKey: process.env.PRIVATE_KEY || '',
+        rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
+        contractAddress: process.env.ESCROW_CONTRACT_ADDRESS || '',
+        network: (process.env.BLOCKCHAIN_NETWORK as BlockchainNetwork) || BlockchainNetwork.HARDHAT
+      }
+    );
+
+    // Phase 3 Advanced P2P Trading Services
+    console.log('🚀 Initializing Phase 3 Advanced P2P Trading Services...');
+    const p2pEngine = new P2PMatchingEngine(smartContractEscrowService);
+    
+    const orderManagementService = new P2POrderManagementService(
+      p2pEngine,
+      smartContractEscrowService,
+      securityService,
+      auditService,
+      prisma,
+      redis
+    );
+    
+    const marketDataService = new P2PMarketDataService(
+      p2pEngine,
+      auditService,
+      prisma,
+      redis
+    );
+    
+    const realtimeService = new P2PRealtimeService(
+      8081, // WebSocket port
+      p2pEngine,
+      securityService,
+      auditService,
+      redis,
+      prisma
+    );
     
     // TODO: Re-enable when services are properly implemented
     // const escrowService = new SecureEscrowService(prisma, {
@@ -309,6 +368,16 @@ async function buildServer() {
     fastify.decorate('securityDashboard', securityDashboard);
     fastify.decorate('wsSecurityService', wsSecurityService);
     fastify.decorate('securityMiddleware', securityMiddleware);
+
+    // Phase 3D Advanced Services - SmartContractEscrowService now enabled (PaymentGateway removed)
+    // PaymentGatewayService removed - pure P2P crypto platform
+    fastify.decorate('smartContractEscrowService', smartContractEscrowService);
+
+    // Phase 3 Advanced P2P Trading Services
+    fastify.decorate('p2pEngine', p2pEngine);
+    fastify.decorate('orderManagementService', orderManagementService);
+    fastify.decorate('marketDataService', marketDataService);
+    fastify.decorate('realtimeService', realtimeService);
 
     // Register Phase 3C Security Middleware
     registerSecurityMiddleware(fastify, securityMiddleware, {
@@ -351,6 +420,8 @@ async function buildServer() {
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
     // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' }); // Disabled temporarily
     await fastify.register(p2pRoutes, { prefix: '/api/v1/p2p' });
+    await fastify.register(p2pTradingRoutes, { prefix: '/api/v1/p2p/trading' });
+    await fastify.register(advancedP2PRoutes, { prefix: '/api/v1/p2p/advanced' });
     await fastify.register(marketDataRoutes, { prefix: '/api/v1/market' });
     await fastify.register(tradingEngineRoutes, { prefix: '/api/v1/trading' });
     
@@ -358,6 +429,11 @@ async function buildServer() {
     await fastify.register(async function (fastify) {
       await securityRoutes(fastify, securityService, fraudDetectionService, auditService);
     }, { prefix: '/api/v1/security' });
+    
+    // TODO: Phase 3D Advanced Routes - Convert from Express to Fastify pattern first
+    // await fastify.register(async function (fastify) {
+    //   await phase3dRoutes(fastify, smartContractEscrowService, paymentGatewayService, auditService);
+    // }, { prefix: '/api/v1/phase3d' });
     
     // TODO: Fix and re-enable these routes after database model alignment
     // await fastify.register(orderRoutes, { prefix: '/api/v1/orders' });

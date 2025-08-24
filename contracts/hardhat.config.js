@@ -49,7 +49,7 @@ module.exports = {
     currency: "USD",
   },
   paths: {
-    sources: "./",
+    sources: "./contracts",
     tests: "../docs/aspirational-tests",
     cache: "./cache",
     artifacts: "./artifacts",
