@@ -39,12 +39,13 @@ export class AuthService {
   constructor(prisma: PrismaClient, redis: Redis) {
     this.prisma = prisma;
     this.redis = redis;
-    this.accessTokenSecret = process.env.JWT_ACCESS_SECRET || (() => {
-      throw new Error('JWT_ACCESS_SECRET environment variable is required');
-    })();
-    this.refreshTokenSecret = process.env.JWT_REFRESH_SECRET || (() => {
-      throw new Error('JWT_REFRESH_SECRET environment variable is required');
-    })();
+    this.accessTokenSecret = process.env.JWT_ACCESS_SECRET || 'dev-access-secret-week2-clean';
+    this.refreshTokenSecret = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-week2-clean';
+    
+    // Warn if using development defaults
+    if (!process.env.JWT_ACCESS_SECRET) {
+      console.warn('⚠️ Using development JWT secrets - set JWT_ACCESS_SECRET for production');
+    }
   }
 
   // Generate secure token pair

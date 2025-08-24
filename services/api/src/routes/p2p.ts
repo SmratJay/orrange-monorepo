@@ -1,11 +1,21 @@
 // P2P Trading API Routes - Fastify Plugin
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { P2PService } from '../services/p2p-service';
+import { SmartContractEscrowService, TradeState, ContractConfig } from '../services/SmartContractEscrowService.js';
 import { z } from 'zod';
 
 const prisma = new PrismaClient();
-const p2pService = new P2PService(prisma);
+
+// Initialize Smart Contract Escrow Service
+const contractConfig: ContractConfig = {
+  contractAddress: process.env.ESCROW_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+  providerUrl: process.env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545',
+  chainId: parseInt(process.env.CHAIN_ID || '1337'),
+  privateKey: process.env.ADMIN_PRIVATE_KEY, // Optional for admin operations
+  gasLimit: 500000
+};
+
+const escrowService = new SmartContractEscrowService(contractConfig);
 
 // Request interfaces for typed requests
 interface CreateAdRequest {

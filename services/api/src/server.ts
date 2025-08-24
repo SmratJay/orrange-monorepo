@@ -19,12 +19,13 @@ import * as dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 // import adminRoutes from './routes/admin'; // Disabled temporarily
 import p2pRoutes from './routes/p2p';
-import p2pTradingRoutes from './routes/p2p-trading';
-import advancedP2PRoutes from './routes/advanced-p2p';
-import marketDataRoutes from './routes/market-data';
+// import p2pTradingRoutes from './routes/p2p-trading'; // Disabled - broken imports
+// import advancedP2PRoutes from './routes/advanced-p2p'; // Disabled - Phase 3 bloat
+// import marketDataRoutes from './routes/market-data'; // Disabled - Week 2 focus, blocking startup
 import tradingEngineRoutes from './routes/trading-engine';
+import tradesClean from './routes/trades-clean';
 // Phase 3C Security Routes
-import { securityRoutes } from './routes/security.js';
+// import { securityRoutes } from './routes/security.js'; // Disabled - missing dependencies
 // Phase 3D Advanced Routes - TODO: Convert from Express to Fastify pattern
 // import { phase3dRoutes } from './routes/phase3d.js';
 
@@ -41,23 +42,26 @@ import { RateService } from './services/RateService';
 // import { SecureEscrowService } from './services/SecureEscrowService';
 // import { EnhancedDisputeService } from './services/DisputeService';
 
-// Phase 3C Enhanced Security Services
-import { SecurityService } from './services/SecurityService.js';
-import { FraudDetectionService } from './services/FraudDetectionService.js';
-import { AuditService } from './services/AuditService.js';
-import { SecurityDashboardService, createSecurityDashboard } from './services/SecurityDashboardService.js';
-import { WebSocketSecurityService, createWebSocketSecurityService } from './websocket/SecurityWebSocket.js';
-import { SecurityMiddleware, createSecurityMiddleware, registerSecurityMiddleware } from './middleware/security.js';
+// Phase 3C Enhanced Security Services - Disabled temporarily for Week 2 focus
+// import { SecurityService } from './services/SecurityService.js';
+// import { FraudDetectionService } from './services/FraudDetectionService.js';
+// import { AuditService } from './services/AuditService.js';
+// import { SecurityDashboardService, createSecurityDashboard } from './services/SecurityDashboardService.js';
+// import { WebSocketSecurityService, createWebSocketSecurityService } from './websocket/SecurityWebSocket.js';
+// import { SecurityMiddleware, createSecurityMiddleware, registerSecurityMiddleware } from './middleware/security.js'; // Disabled - missing deps
 
 // Phase 3D Advanced Services - SmartContractEscrowService now clean (PaymentGateway removed)
-import { SmartContractEscrowService, createSmartContractEscrowService, BlockchainNetwork } from './services/SmartContractEscrowService.js';
+import { SmartContractEscrowService } from './services/SmartContractEscrowService.js';
 // PaymentGatewayService removed - pure P2P crypto platform
 
-// Phase 3 Advanced P2P Trading Services
-import P2PMatchingEngine from './services/P2PMatchingEngine.js';
-import P2POrderManagementService from './services/P2POrderManagementService.js';
-import P2PMarketDataService from './services/P2PMarketDataService.js';
-import P2PRealtimeService from './services/P2PRealtimeService.js';
+// Week 2 Day 3: Clean WebSocket Implementation
+import { registerTradeWebSocket } from './websocket/trade-websocket.js';
+
+// Phase 3 Advanced P2P Trading Services - Disabled for Week 2 focus
+// import P2PMatchingEngine from './services/P2PMatchingEngine.js';
+// import P2POrderManagementService from './services/P2POrderManagementService.js';
+// import P2PMarketDataService from './services/P2PMarketDataService.js';
+// import P2PRealtimeService from './services/P2PRealtimeService.js';
 
 // Import queues
 import { emailQueue, smsQueue, blockchainQueue, matchingQueue } from './queues/index.js';
@@ -113,18 +117,8 @@ const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}, starting graceful shutdown`);
   
   try {
-    // Stop Phase 3C Security Services first
-    logger.info('Stopping Phase 3C Security Services...');
-    const server = await buildServer(); // Get instance for cleanup
-    const securityDashboard = (server as any).securityDashboard;
-    const wsSecurityService = (server as any).wsSecurityService;
-    
-    if (securityDashboard) {
-      securityDashboard.stopMonitoring();
-    }
-    if (wsSecurityService) {
-      await wsSecurityService.stop();
-    }
+    // Phase 3C Security Services disabled for Week 2 focus
+    logger.info('Graceful shutdown - Phase 3C services disabled');
     
     // Close Fastify server
     await fastify.close();
@@ -284,59 +278,49 @@ async function buildServer() {
     const notificationService = new NotificationService(prisma, redis);
     const rateService = new RateService(redis);
     
-    // Phase 3C Enhanced Security Services
-    console.log('🛡️  Initializing Phase 3C Enhanced Security Services...');
-    const securityService = new SecurityService(prisma, redis);
-    const fraudDetectionService = new FraudDetectionService(prisma, redis);
-    const auditService = new AuditService(prisma, redis); // Fixed: added redis parameter
-    const securityDashboard = createSecurityDashboard(securityService, fraudDetectionService, auditService);
-    const wsSecurityService = createWebSocketSecurityService(securityDashboard, auditService, securityService, 8080);
-    const securityMiddleware = createSecurityMiddleware(securityService, fraudDetectionService, auditService);
+    // Phase 3C Enhanced Security Services - Disabled for Week 2 focus
+    console.log('🛡️  Phase 3C Security Services disabled for Week 2 focus');
+    // const securityService = new SecurityService(prisma, redis);
+    // const fraudDetectionService = new FraudDetectionService(prisma, redis);
+    // const auditService = new AuditService(prisma, redis);
+    // const securityDashboard = createSecurityDashboard(securityService, fraudDetectionService, auditService);
+    // const wsSecurityService = createWebSocketSecurityService(securityDashboard, auditService, securityService, 8080);
+    // const securityMiddleware = createSecurityMiddleware(securityService, fraudDetectionService, auditService);
     
-    // TODO: Phase 3D Advanced Services - Enable after fixing compilation issues
-    // console.log('🔗 Initializing Phase 3D Smart Contract Services...');
-    // PaymentGatewayService removed - pure P2P crypto platform  
-    const smartContractEscrowService = createSmartContractEscrowService(
-      prisma,
-      redis,
-      securityService,
-      auditService,
-      {
-        privateKey: process.env.PRIVATE_KEY || '',
-        rpcUrl: process.env.RPC_URL || 'http://localhost:8545',
-        contractAddress: process.env.ESCROW_CONTRACT_ADDRESS || '',
-        network: (process.env.BLOCKCHAIN_NETWORK as BlockchainNetwork) || BlockchainNetwork.HARDHAT
-      }
-    );
-
-    // Phase 3 Advanced P2P Trading Services
-    console.log('🚀 Initializing Phase 3 Advanced P2P Trading Services...');
-    const p2pEngine = new P2PMatchingEngine(smartContractEscrowService);
-    
-    const orderManagementService = new P2POrderManagementService(
-      p2pEngine,
-      smartContractEscrowService,
-      securityService,
-      auditService,
-      prisma,
-      redis
-    );
-    
-    const marketDataService = new P2PMarketDataService(
-      p2pEngine,
-      auditService,
-      prisma,
-      redis
-    );
-    
-    const realtimeService = new P2PRealtimeService(
-      8081, // WebSocket port
-      p2pEngine,
-      securityService,
-      auditService,
-      redis,
-      prisma
-    );
+    // Week 2 Day 1: Clean Smart Contract Service (no Phase 3 dependencies)
+    console.log('🔗 Initializing Clean Smart Contract Service...');
+    const smartContractEscrowService = new SmartContractEscrowService({
+      contractAddress: process.env.CONTRACT_ADDRESS || '0x1234567890123456789012345678901234567890',
+      providerUrl: process.env.RPC_URL || 'http://localhost:8545',
+      chainId: parseInt(process.env.CHAIN_ID || '31337'),
+      privateKey: process.env.PRIVATE_KEY || undefined,
+      gasLimit: 500000,
+      gasPrice: '20000000000' // 20 gwei
+    });    // Phase 3 Advanced P2P Trading Services - Disabled for Week 2 focus
+    console.log('🚀 Phase 3 P2P Services disabled for Week 2 focus');
+    // const p2pEngine = new P2PMatchingEngine(smartContractEscrowService);
+    // const orderManagementService = new P2POrderManagementService(
+    //   p2pEngine,
+    //   smartContractEscrowService,
+    //   securityService,
+    //   auditService,
+    //   prisma,
+    //   redis
+    // );
+    // const marketDataService = new P2PMarketDataService(
+    //   p2pEngine,
+    //   auditService,
+    //   prisma,
+    //   redis
+    // );
+    // const realtimeService = new P2PRealtimeService(
+    //   8081, // WebSocket port
+    //   p2pEngine,
+    //   securityService,
+    //   auditService,
+    //   redis,
+    //   prisma
+    // );
     
     // TODO: Re-enable when services are properly implemented
     // const escrowService = new SecureEscrowService(prisma, {
@@ -361,34 +345,34 @@ async function buildServer() {
     fastify.decorate('authMiddleware', authMiddleware);
     // fastify.decorate('matchingEngine', matchingEngine);
     
-    // Phase 3C Security Services
-    fastify.decorate('securityService', securityService);
-    fastify.decorate('fraudDetectionService', fraudDetectionService);
-    fastify.decorate('auditService', auditService);
-    fastify.decorate('securityDashboard', securityDashboard);
-    fastify.decorate('wsSecurityService', wsSecurityService);
-    fastify.decorate('securityMiddleware', securityMiddleware);
+    // Phase 3C Security Services - Disabled for Week 2 focus
+    // fastify.decorate('securityService', securityService);
+    // fastify.decorate('fraudDetectionService', fraudDetectionService);
+    // fastify.decorate('auditService', auditService);
+    // fastify.decorate('securityDashboard', securityDashboard);
+    // fastify.decorate('wsSecurityService', wsSecurityService);
+    // fastify.decorate('securityMiddleware', securityMiddleware);
 
     // Phase 3D Advanced Services - SmartContractEscrowService now enabled (PaymentGateway removed)
     // PaymentGatewayService removed - pure P2P crypto platform
     fastify.decorate('smartContractEscrowService', smartContractEscrowService);
 
-    // Phase 3 Advanced P2P Trading Services
-    fastify.decorate('p2pEngine', p2pEngine);
-    fastify.decorate('orderManagementService', orderManagementService);
-    fastify.decorate('marketDataService', marketDataService);
-    fastify.decorate('realtimeService', realtimeService);
+    // Phase 3 Advanced P2P Trading Services - Disabled for Week 2 focus
+    // fastify.decorate('p2pEngine', p2pEngine);
+    // fastify.decorate('orderManagementService', orderManagementService);
+    // fastify.decorate('marketDataService', marketDataService);
+    // fastify.decorate('realtimeService', realtimeService);
 
-    // Register Phase 3C Security Middleware
-    registerSecurityMiddleware(fastify, securityMiddleware, {
-      enableRateLimit: false, // Using existing Fastify rate limit
-      enableIPControl: false,
-      enableMFA: true,
-      enableDeviceFingerprint: true,
-      enableFraudDetection: true,
-      enableSecurityHeaders: true,
-      enableSessionSecurity: true
-    });
+    // Register Phase 3C Security Middleware - Disabled for Week 2 focus
+    // registerSecurityMiddleware(fastify, securityMiddleware, {
+    //   enableRateLimit: false, // Using existing Fastify rate limit
+    //   enableIPControl: false,
+    //   enableMFA: true,
+    //   enableDeviceFingerprint: true,
+    //   enableFraudDetection: true,
+    //   enableSecurityHeaders: true,
+    //   enableSessionSecurity: true
+    // });
 
     // Health check endpoint
     fastify.get('/health', {
@@ -420,14 +404,15 @@ async function buildServer() {
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
     // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' }); // Disabled temporarily
     await fastify.register(p2pRoutes, { prefix: '/api/v1/p2p' });
-    await fastify.register(p2pTradingRoutes, { prefix: '/api/v1/p2p/trading' });
-    await fastify.register(advancedP2PRoutes, { prefix: '/api/v1/p2p/advanced' });
-    await fastify.register(marketDataRoutes, { prefix: '/api/v1/market' });
+    // await fastify.register(p2pTradingRoutes, { prefix: '/api/v1/p2p/trading' }); // Disabled - broken imports
+    // await fastify.register(advancedP2PRoutes, { prefix: '/api/v1/p2p/advanced' }); // Disabled - Phase 3 bloat
+    await fastify.register(tradesClean, { prefix: '/api/v1/trades' }); // NEW: Clean trade routes
+    // await fastify.register(marketDataRoutes, { prefix: '/api/v1/market' }); // Disabled - Week 2 focus, blocking startup
     await fastify.register(tradingEngineRoutes, { prefix: '/api/v1/trading' });
     
     // Phase 3C Security Routes
     await fastify.register(async function (fastify) {
-      await securityRoutes(fastify, securityService, fraudDetectionService, auditService);
+      // await securityRoutes(fastify, securityService, fraudDetectionService, auditService); // Disabled for Week 2
     }, { prefix: '/api/v1/security' });
     
     // TODO: Phase 3D Advanced Routes - Convert from Express to Fastify pattern first
@@ -443,38 +428,20 @@ async function buildServer() {
     // await fastify.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
     // Note: Removed matching routes - P2P platform uses ad browsing instead
 
-    // WebSocket handlers  
-    fastify.register(async function (fastify) {
-      // Legacy WebSocket handler
-      fastify.get('/ws', { websocket: true }, (connection, req) => {
-        connection.on('message', (message: Buffer) => {
-          // Handle WebSocket messages
-          connection.send('Echo: ' + message.toString());
-        });
-      });
-      
-      // Phase 3C Security WebSocket endpoint
-      fastify.get('/security-ws', { websocket: true }, (connection, req) => {
-        // Security WebSocket connections are handled by SecurityWebSocket service
-        connection.on('message', (message: Buffer) => {
-          connection.send(JSON.stringify({
-            type: 'info',
-            message: 'Security WebSocket connected - use dedicated security server on port 8080'
-          }));
-        });
-      });
-    });
+    // Week 2 Day 3: Clean WebSocket Implementation for Trade Events
+    await registerTradeWebSocket(fastify, smartContractEscrowService, prisma);
+    console.log('✅ Trade WebSocket handlers registered');
 
     // Start services
     await rateService.start();
     // TODO: Re-enable after fixing MatchingEngine
     // await matchingEngine.start();
     
-    // Start Phase 3C Security Services
-    console.log('🚀 Starting Phase 3C Security Services...');
-    await securityDashboard.startMonitoring(10000); // 10 second intervals
-    await wsSecurityService.start();
-    console.log('✅ Phase 3C Enhanced Security System activated!');
+    // Start Phase 3C Security Services - Disabled for Week 2 focus
+    console.log('🚀 Phase 3C Security Services disabled for Week 2 focus');
+    // await securityDashboard.startMonitoring(10000);
+    // await wsSecurityService.start();
+    console.log('✅ Week 2 Clean Server System activated!');
 
     return fastify;
   } catch (error) {

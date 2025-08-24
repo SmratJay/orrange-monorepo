@@ -122,7 +122,19 @@ export default async function tradingEngineRoutes(fastify: FastifyInstance) {
     schema: {
       tags: ['Trading'],
       summary: 'Submit a new trading order',
-      body: OrderSubmissionSchema,
+      body: {
+        type: 'object',
+        required: ['symbol', 'type', 'side', 'quantity'],
+        properties: {
+          symbol: { type: 'string', minLength: 1 },
+          type: { type: 'string', enum: ['MARKET', 'LIMIT', 'STOP', 'STOP_LIMIT'] },
+          side: { type: 'string', enum: ['BUY', 'SELL'] },
+          quantity: { type: 'string' },
+          price: { type: 'string' },
+          stopPrice: { type: 'string' },
+          timeInForce: { type: 'string', enum: ['GTC', 'IOC', 'FOK'], default: 'GTC' }
+        }
+      },
       response: {
         201: {
           type: 'object',
@@ -337,7 +349,30 @@ export default async function tradingEngineRoutes(fastify: FastifyInstance) {
     schema: {
       tags: ['Trading Bots'],
       summary: 'Create a new trading bot',
-      body: BotCreationSchema
+      body: {
+        type: 'object',
+        required: ['name', 'strategy', 'symbol'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          strategy: { type: 'string', enum: ['DCA', 'GRID', 'ARBITRAGE'] },
+          symbol: { type: 'string', minLength: 1 },
+          isActive: { type: 'boolean', default: false },
+          config: {
+            type: 'object',
+            properties: {
+              dcaAmount: { type: 'number', minimum: 0 },
+              dcaInterval: { type: 'number', minimum: 0 },
+              gridSpacing: { type: 'number', minimum: 0 },
+              gridLevels: { type: 'integer', minimum: 1 },
+              basePrice: { type: 'number', minimum: 0 },
+              maxInvestment: { type: 'number', minimum: 0 },
+              stopLoss: { type: 'number', minimum: 0 },
+              takeProfit: { type: 'number', minimum: 0 },
+              maxDrawdown: { type: 'number', minimum: 0 }
+            }
+          }
+        }
+      }
     },
     preHandler: fastify.authenticate
   }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -430,9 +465,30 @@ export default async function tradingEngineRoutes(fastify: FastifyInstance) {
         type: 'object',
         properties: {
           botId: { type: 'string' }
-        }
+        },
+        required: ['botId']
       },
-      body: BotUpdateSchema
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          isActive: { type: 'boolean' },
+          config: {
+            type: 'object',
+            properties: {
+              dcaAmount: { type: 'number', minimum: 0 },
+              dcaInterval: { type: 'number', minimum: 0 },
+              gridSpacing: { type: 'number', minimum: 0 },
+              gridLevels: { type: 'integer', minimum: 1 },
+              basePrice: { type: 'number', minimum: 0 },
+              maxInvestment: { type: 'number', minimum: 0 },
+              stopLoss: { type: 'number', minimum: 0 },
+              takeProfit: { type: 'number', minimum: 0 },
+              maxDrawdown: { type: 'number', minimum: 0 }
+            }
+          }
+        }
+      }
     },
     preHandler: fastify.authenticate
   }, async (request: FastifyRequest, reply: FastifyReply) => {

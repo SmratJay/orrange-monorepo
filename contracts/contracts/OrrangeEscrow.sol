@@ -49,8 +49,8 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
         uint256 expiresAt;
         uint256 lastActivityAt;
         TradeState state;
-        bytes32 sellerSignature;
-        bytes32 buyerSignature;
+        bytes sellerSignature;
+        bytes buyerSignature;
         uint256 nonce;
         bool requiresKYC;
         bytes32 paymentHash; // Hash of payment method details
@@ -137,7 +137,7 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
         address _feeCollector,
         address _emergencyMultisig,
         address _initialAdmin
-    ) {
+    ) Ownable(_initialAdmin) {
         feeCollector = _feeCollector;
         emergencyMultisig = _emergencyMultisig;
         
@@ -170,7 +170,7 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
         uint256 _amount,
         uint256 _expiresAt,
         bytes32 _paymentHash,
-        bytes32 _sellerSignature,
+        bytes memory _sellerSignature,
         uint256 _nonce,
         bool _requiresKYC
     ) external nonReentrant whenNotPaused {
@@ -180,7 +180,7 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
             revert BlacklistedAddress();
         if (!whitelistedTokens[_tokenAddress]) revert UnsupportedToken();
         if (trades[_tradeId].state != TradeState.NONE) revert TradeAlreadyExists();
-        if (usedNonces[_nonce]) revert InvalidNonce();
+        if (usedNonces[bytes32(_nonce)]) revert InvalidNonce();
         if (_amount < securityConfig.minTradeAmount || _amount > securityConfig.maxTradeAmount) 
             revert ExceedsMaxAmount();
         
@@ -224,14 +224,14 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
             lastActivityAt: block.timestamp,
             state: TradeState.ACTIVE,
             sellerSignature: _sellerSignature,
-            buyerSignature: bytes32(0),
+            buyerSignature: new bytes(0),
             nonce: _nonce,
             requiresKYC: _requiresKYC,
             paymentHash: _paymentHash
         });
         
         // Update tracking variables
-        usedNonces[_nonce] = true;
+        usedNonces[bytes32(_nonce)] = true;
         dailyVolume[msg.sender] += _amount;
         totalEscrowedAmount += totalRequired;
         lastTradeTimestamp[msg.sender] = block.timestamp;
@@ -274,7 +274,7 @@ contract OrrangeEscrow is ReentrancyGuard, Pausable, Ownable, AccessControl {
      */
     function completeTrade(
         bytes32 _tradeId,
-        bytes32 _buyerSignature
+        bytes memory _buyerSignature
     ) external nonReentrant onlyRole(ADMIN_ROLE) {
         Trade storage trade = trades[_tradeId];
         
