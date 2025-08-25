@@ -259,17 +259,17 @@ export const trackError = (errorType: string, severity: 'low' | 'medium' | 'high
     .inc();
 };
 
+// Custom memory metrics - Create once to avoid duplicate registration
+const memoryUsageGauge = new client.Gauge({
+  name: 'process_memory_usage_bytes',
+  help: 'Process memory usage in bytes',
+  labelNames: ['type'],
+  registers: [register]
+});
+
 // Memory usage tracking (called periodically)
 export const trackMemoryUsage = () => {
   const memUsage = process.memoryUsage();
-  
-  // Custom memory metrics
-  const memoryUsageGauge = new client.Gauge({
-    name: 'process_memory_usage_bytes',
-    help: 'Process memory usage in bytes',
-    labelNames: ['type'],
-    registers: [register]
-  });
   
   memoryUsageGauge.labels('rss').set(memUsage.rss);
   memoryUsageGauge.labels('heap_total').set(memUsage.heapTotal);
