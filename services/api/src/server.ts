@@ -17,6 +17,7 @@ import * as dotenv from 'dotenv';
 
 // Import API routes
 import authRoutes from './routes/auth';
+import healthRoutes from './routes/health';
 // import adminRoutes from './routes/admin'; // Disabled temporarily
 import p2pRoutes from './routes/p2p';
 // import p2pTradingRoutes from './routes/p2p-trading'; // Disabled - broken imports
@@ -374,33 +375,8 @@ async function buildServer() {
     //   enableSessionSecurity: true
     // });
 
-    // Health check endpoint
-    fastify.get('/health', {
-      schema: {
-        description: 'Health check endpoint',
-        tags: ['System'],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              status: { type: 'string' },
-              timestamp: { type: 'string' },
-              version: { type: 'string' },
-              uptime: { type: 'number' }
-            }
-          }
-        }
-      }
-    }, async (request, reply) => {
-      return {
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        version: process.env.npm_package_version || '1.0.0',
-        uptime: process.uptime()
-      };
-    });
-
     // Register routes
+    await fastify.register(healthRoutes, { prefix: '/' });
     await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
     // await fastify.register(adminRoutes, { prefix: '/api/v1/admin' }); // Disabled temporarily
     await fastify.register(p2pRoutes, { prefix: '/api/v1/p2p' });
