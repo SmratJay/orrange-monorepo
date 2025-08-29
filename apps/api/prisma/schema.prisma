@@ -1,0 +1,173 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  password          String   // bcrypt hashed password
+  username          String?  @unique
+  walletAddress     String?  @unique
+  isEmailVerified   Boolean  @default(false)
+  emailVerificationToken String?
+  
+  // Profile Information
+  firstName         String?
+  lastName          String?
+  avatar            String?
+  bio               String?
+  
+  // KYC & Trust
+  kycStatus         KycStatus @default(PENDING)
+  trustScore        Float     @default(0.0)
+  isActive          Boolean   @default(true)
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  
+  // Relations
+  refreshTokens     RefreshToken[]
+  orders            Order[] @relation("UserOrders")
+  tradingOrders     Order[] @relation("TradingPartner")
+  sentMessages      Message[] @relation("SentMessages")
+  
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("refresh_tokens")
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  userId          String
+  type            OrderType
+  cryptoAsset     String      // e.g., "USDC", "USDT", "LTC"
+  chain           String?     // e.g., "base", "bsc", "solana", null for LTC
+  amount          Decimal
+  fiatCurrency    String      // e.g., "USD", "EUR"
+  fiatAmount      Decimal
+  rate            Decimal
+  paymentMethods  String[]    // JSON array of accepted payment methods
+  minLimit        Decimal?
+  maxLimit        Decimal?
+  timeLimit       Int         @default(30) // minutes
+  status          OrderStatus @default(ACTIVE)
+  description     String?
+  
+  // Trading partner info (filled when matched)
+  tradingPartnerId String?
+  tradingPartner   User?       @relation("TradingPartner", fields: [tradingPartnerId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  expiresAt       DateTime
+  
+  user     User      @relation("UserOrders", fields: [userId], references: [id], onDelete: Cascade)
+  trade    Trade?
+  messages Message[]
+  
+  @@map("orders")
+}
+
+model Trade {
+  id              String      @id @default(cuid())
+  orderId         String      @unique
+  buyerId         String
+  sellerId        String
+  amount          Decimal
+  fiatAmount      Decimal
+  rate            Decimal
+  paymentMethod   String
+  status          TradeStatus @default(PENDING)
+  
+  // Escrow information
+  escrowTxHash    String?
+  releaseTxHash   String?
+  
+  // Dispute handling
+  isDisputed      Boolean     @default(false)
+  disputeReason   String?
+  resolvedBy      String?     // Admin ID who resolved dispute
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+  
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  messages Message[]
+  
+  @@map("trades")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String
+  senderId  String
+  orderId   String?
+  tradeId   String?
+  type      MessageType @default(TEXT)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  sender User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  trade  Trade? @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  
+  @@map("messages")
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum OrderType {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  ACTIVE
+  INACTIVE
+  MATCHED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum TradeStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+  DISPUTE
+}
